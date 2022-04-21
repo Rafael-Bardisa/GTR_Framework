@@ -13,16 +13,31 @@
 
 using namespace GTR;
 
+float renderFactor(GTR::eAlphaMode mode){
+    return mode == GTR::eAlphaMode::BLEND ? 1.0f : -1.0f;
+}
+
+// inverse render priority: more negative number must be rendered first
+// maybe overengineered, must test for errors
+bool GTR::renderPriority(const RenderInstruct& first, const RenderInstruct& second){
+    return ((renderFactor(first.material->alpha_mode) / first.distance) < (renderFactor(second.material->alpha_mode) / second.distance));
+}
+
+// upgraded this mofo
+// ordered, something weird with colors before loading textures
 void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
 {
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
+    
+    //empty node list
+    nodes.clear();
 
 	// Clear the color and the depth buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	checkGLErrors();
 
-	//render entities
+
 	for (int i = 0; i < scene->entities.size(); ++i)
 	{
 		BaseEntity* ent = scene->entities[i];
@@ -37,9 +52,16 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
 				renderPrefab(ent->model, pent->prefab, camera);
 		}
 	}
+    // sort node vector by priority
+    std::sort(nodes.begin(), nodes.end(), GTR::renderPriority);
+
+    // render nodes by priority
+    for(auto node = nodes.begin(); node != nodes.end(); node++) {
+        renderMeshWithMaterial( node->model, node->mesh, node->material, camera);
+       }
 }
 
-//renders all the prefab
+//adds nodes of prefab to renderer node list
 void Renderer::renderPrefab(const Matrix44& model, GTR::Prefab* prefab, Camera* camera)
 {
 	assert(prefab && "PREFAB IS NULL");
@@ -47,7 +69,7 @@ void Renderer::renderPrefab(const Matrix44& model, GTR::Prefab* prefab, Camera* 
 	renderNode(model, &prefab->root, camera);
 }
 
-//renders a node of the prefab and its children
+//adds a node, if visible, to the node vector and recursively calls on its children
 void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera* camera)
 {
 	if (!node->visible)
@@ -66,8 +88,12 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
 		if (camera->testBoxInFrustum(world_bounding.center, world_bounding.halfsize) )
 		{
 			//render node mesh
-			renderMeshWithMaterial( node_model, node->mesh, node->material, camera );
+            // compare (a, b) is: a before b?
+
+            // new RenderInstruct, must add to cool vector
+            nodes.push_back(RenderInstruct( node_model, node->mesh, node->material, camera->eye.distance(world_bounding.center)));
 			//node->mesh->renderBounding(node_model, true);
+            
 		}
 	}
 

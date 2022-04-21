@@ -1,23 +1,43 @@
 #pragma once
 #include "prefab.h"
-
+#include "stdlib.h"
+#include <algorithm>
 //forward declarations
 class Camera;
 
 namespace GTR {
 
+    
+
 	class Prefab;
 	class Material;
+
+    class RenderInstruct {
+        
+    public:
+        Matrix44 model;
+        Mesh* mesh;
+        GTR::Material* material;
+        float distance;
+        
+        RenderInstruct(Matrix44 model, Mesh* mesh, GTR::Material* material, float distance){
+            this->model = model;
+            this->mesh = mesh;
+            this->material = material;
+            this->distance = distance;
+        }
+    };
 	
 	// This class is in charge of rendering anything in our system.
 	// Separating the render from anything else makes the code cleaner
 	class Renderer
 	{
-
+        
 	public:
-
+        std::vector<RenderInstruct> nodes;
 		//add here your functions
 		//...
+        
 
 		//renders several elements of the scene
 		void renderScene(GTR::Scene* scene, Camera* camera);
@@ -33,5 +53,7 @@ namespace GTR {
 	};
 
 	Texture* CubemapFromHDRE(const char* filename);
+    
+bool renderPriority(const RenderInstruct& first, const RenderInstruct& second);
 
 };

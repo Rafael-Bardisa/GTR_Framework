@@ -20,7 +20,6 @@
 		12BE84C81981D8180090DDBD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 12BE84C61981D8180090DDBD /* InfoPlist.strings */; };
 		12BE84CE1981D8180090DDBD /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 12BE84CC1981D8180090DDBD /* Credits.rtf */; };
 		12BE84D61981D8180090DDBD /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 12BE84D51981D8180090DDBD /* Images.xcassets */; };
-		12BE84F21981D8F20090DDBD /* SDL2.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12BE84F11981D8F20090DDBD /* SDL2.framework */; };
 		12D3D2D419903A8200779234 /* GLUT.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12D3D2D319903A8200779234 /* GLUT.framework */; };
 		12D3D2D619903A9A00779234 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12D3D2D519903A9A00779234 /* OpenGL.framework */; };
 		12E51D1A244B39650023C412 /* utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 12E51CFB244B39600023C412 /* utils.cpp */; };
@@ -48,6 +47,9 @@
 		12E51D4B244B3A0E0023C412 /* coldet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 12E51D40244B3A0D0023C412 /* coldet.cpp */; };
 		12E51D4C244B3A0E0023C412 /* coldet_bld.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 12E51D42244B3A0E0023C412 /* coldet_bld.cpp */; };
 		12E51D4D244B3A0E0023C412 /* math3d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 12E51D43244B3A0E0023C412 /* math3d.cpp */; };
+		B4630119280F2AFA00E50200 /* task.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B4630118280F2AF900E50200 /* task.cpp */; };
+		B463011B280F2B0900E50200 /* task.h in Sources */ = {isa = PBXBuildFile; fileRef = B463011A280F2B0800E50200 /* task.h */; };
+		B463011D280F2D1400E50200 /* SDL2.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B463011C280F2D1400E50200 /* SDL2.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -126,6 +128,9 @@
 		12E51D43244B3A0E0023C412 /* math3d.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = math3d.cpp; path = ../src/extra/coldet/math3d.cpp; sourceTree = "<group>"; };
 		12E51D44244B3A0E0023C412 /* mytritri.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = mytritri.h; path = ../src/extra/coldet/mytritri.h; sourceTree = "<group>"; };
 		12E51D45244B3A0E0023C412 /* coldet.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = coldet.h; path = ../src/extra/coldet/coldet.h; sourceTree = "<group>"; };
+		B4630118280F2AF900E50200 /* task.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = task.cpp; path = ../src/task.cpp; sourceTree = "<group>"; };
+		B463011A280F2B0800E50200 /* task.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = task.h; path = ../src/task.h; sourceTree = "<group>"; };
+		B463011C280F2D1400E50200 /* SDL2.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SDL2.framework; path = System/Library/Frameworks/SDL2.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -133,9 +138,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B463011D280F2D1400E50200 /* SDL2.framework in Frameworks */,
 				12D3D2D619903A9A00779234 /* OpenGL.framework in Frameworks */,
 				12D3D2D419903A8200779234 /* GLUT.framework in Frameworks */,
-				12BE84F21981D8F20090DDBD /* SDL2.framework in Frameworks */,
 				12BE84BE1981D8180090DDBD /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -146,6 +151,8 @@
 		12BE84B11981D8180090DDBD = {
 			isa = PBXGroup;
 			children = (
+				B463011A280F2B0800E50200 /* task.h */,
+				B4630118280F2AF900E50200 /* task.cpp */,
 				1278921C262C454100178A4E /* scene.cpp */,
 				1278921D262C454100178A4E /* scene.h */,
 				1278921A262C451400178A4E /* tritri.cpp */,
@@ -202,6 +209,7 @@
 		12BE84BC1981D8180090DDBD /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				B463011C280F2D1400E50200 /* SDL2.framework */,
 				12D3D2D519903A9A00779234 /* OpenGL.framework */,
 				12D3D2D319903A8200779234 /* GLUT.framework */,
 				12BE84F11981D8F20090DDBD /* SDL2.framework */,
@@ -308,13 +316,14 @@
 			isa = PBXProject;
 			attributes = {
 				LastUpgradeCheck = 0510;
-				ORGANIZATIONNAME = "___FULLUSERNAME___";
+				ORGANIZATIONNAME = "Rafael Bardisa Rodes";
 			};
 			buildConfigurationList = 12BE84B51981D8180090DDBD /* Build configuration list for PBXProject "GTR_XCODE" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				English,
 				en,
 				Base,
 			);
@@ -347,6 +356,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B463011B280F2B0900E50200 /* task.h in Sources */,
+				B4630119280F2AFA00E50200 /* task.cpp in Sources */,
 				1278921E262C454100178A4E /* scene.cpp in Sources */,
 				1278921F262C454100178A4E /* scene.h in Sources */,
 				1278921B262C451500178A4E /* tritri.cpp in Sources */,
@@ -479,6 +490,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				COMBINE_HIDPI_IMAGES = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -507,6 +519,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				COMBINE_HIDPI_IMAGES = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
