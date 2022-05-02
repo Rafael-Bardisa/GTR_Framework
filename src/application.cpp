@@ -36,7 +36,7 @@ Application::Application(int window_width, int window_height, SDL_Window* window
 	must_exit = false;
 	render_debug = true;
 	render_gui = true;
-
+    multipass_shader = true;
 	render_wireframe = false;
 
 	fps = 0;
@@ -132,6 +132,10 @@ void Application::update(double seconds_elapsed)
          camera->eye << "\n" <<
         "CAMERA CENTER: " <<
          camera->center << "\n";
+    }
+    // no me va el was key pressed
+    if(Input::isKeyPressed(SDL_SCANCODE_M)){
+        multipass_shader = !multipass_shader;
     }
 
 	//mouse input to rotate the cam

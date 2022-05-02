@@ -2,9 +2,10 @@
 #include "prefab.h"
 #include "stdlib.h"
 #include <algorithm>
+#define MAX_LIGHTS 6
 //forward declarations
 class Camera;
-
+class Shader;
 namespace GTR {
 
     
@@ -52,7 +53,9 @@ namespace GTR {
 		//to render one node from the prefab and its children
 		void renderNode(const Matrix44& model, GTR::Node* node, Camera* camera);
 
-		//to render one mesh given its material and transformation matrix
+        void renderMultipass(Mesh *mesh, Shader *shader);
+        
+//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera);
         //to render one mesh with render instruction
         inline void renderInstruction(const RenderInstruct instruction, Camera* camera){

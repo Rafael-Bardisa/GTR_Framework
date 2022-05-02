@@ -11,6 +11,7 @@
 #include "extra/hdre.h"
 #include <cmath>
 #include <math.h>
+#include "application.h"
 
 using namespace GTR;
 
@@ -114,7 +115,7 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
 		renderNode(prefab_model, node->children[i], camera);
 }
 
-static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader, Texture *texture) {
+static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader, Texture *color_texture, Texture *emissive_texture, Texture *metallic_texture, Texture *normal_texture, Texture *occlusion_texture) {
     shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
     shader->setUniform("u_camera_position", camera->eye);
     shader->setUniform("u_model", model );
@@ -122,8 +123,18 @@ static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::M
     shader->setUniform("u_time", t );
     
     shader->setUniform("u_color", material->color);
-    if(texture)
-        shader->setUniform("u_texture", texture, 0);
+    if(color_texture)
+        shader->setUniform("u_color_texture", color_texture, 0);
+    
+    if(emissive_texture)
+        shader->setUniform("u_emissive_texture", emissive_texture, 1);
+    if(metallic_texture)
+        shader->setUniform("u_metallic_texture", metallic_texture, 2);
+    if(normal_texture)
+        shader->setUniform("u_normal_texture", normal_texture, 3);
+    if(occlusion_texture)
+        shader->setUniform("u_occlusion_texture", occlusion_texture, 4);
+    
     
     //this is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
     shader->setUniform("u_alpha_cutoff", material->alpha_mode == GTR::eAlphaMode::MASK ? material->alpha_cutoff : 0);
@@ -139,15 +150,37 @@ static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::M
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) : glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 }
 
+void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
+    for(auto light : lights){
+        
+        shader->setUniform("u_light_type", (int)light->type);
+        
+        shader->setUniform("u_light_color", light->color * light->intensity);
+        shader->setUniform("u_light_position", light->model.getTranslation());
+        shader->setUniform("u_max_distance", light->max_dist);
+        float light_angle_cosine = cos(light->cone_angle * DEG2RAD);
+        shader->setUniform("u_cone_angle_cos", light_angle_cosine);
+        shader->setUniform("u_cone_exp", light->cone_exp);
+        shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, 1)).normalize());
+        
+        shader->setUniform("target", light->target);
+        //do the draw call that renders the mesh into the screen
+        mesh->render(GL_TRIANGLES);
+        
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        
+        shader->setUniform("u_ambient_light", Vector3());
+        //tell shader to not add alpha
+        shader->setUniform("u_use_alpha", false);
+        //std::cout << i;
+    }
+}
+
 //renders a mesh given its transform and material
 void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera)
 {
-    /*
-     para multipass quitar ambient despues de primera iter
-     glblend (src alpha, gl one)
-     
-     aqui se viene el chido
-     */
+
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material )
 		return;
@@ -177,7 +210,8 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     assert(glGetError() == GL_NO_ERROR);
 
 	//chose a shader
-	shader = Shader::Get("multiphong");
+    bool multipass = Application::instance->multipass_shader;
+	shader = multipass ? Shader::Get("multiphong") : Shader::Get("singlephong");
 
     assert(glGetError() == GL_NO_ERROR);
 
@@ -187,36 +221,38 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
 	shader->enable();
 
 	//upload uniforms
-    uploadCommonData(*this, camera, material, model, shader, color_texture);
+    uploadCommonData(*this, camera, material, model, shader, color_texture, emissive_texture, metallic_texture, normal_texture, occlusion_texture);
 
     
     glDepthFunc(GL_LEQUAL);
     
-    for(auto light : lights){
-
-        shader->setUniform("u_light_type", (int)light->type);
-        
-        shader->setUniform("u_light_color", light->color * light->intensity);
-        shader->setUniform("u_light_position", light->model.getTranslation());
-        shader->setUniform("u_max_distance", light->max_dist);
-        float light_angle_cosine = cos(light->cone_angle * DEG2RAD);
-        shader->setUniform("u_cone_angle_cos", light_angle_cosine);
-        shader->setUniform("u_cone_exp", light->cone_exp);
-        shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, 1)).normalize());
-
-        shader->setUniform("target", light->target);
+    if (multipass)
+        renderMultipass(mesh, shader);
+    else{
+        Vector3 positions[MAX_LIGHTS];
+        Vector3 light_color[MAX_LIGHTS];
+        int type[MAX_LIGHTS];
+        float max_distance[MAX_LIGHTS];
+        float angle[MAX_LIGHTS];
+        float cone_angle_cosine[MAX_LIGHTS];
+        float cone_exp[MAX_LIGHTS];
+        Vector3 light_direction[MAX_LIGHTS];
+        Vector3 target[MAX_LIGHTS];
         //do the draw call that renders the mesh into the screen
-        mesh->render(GL_TRIANGLES);
+        for (int i = 0; i < num_lights; i++){
+            LightEntity* light = lights[i];
+            positions[i] = light->model.getTranslation();
+            light_color[i] = light->color;
+            type[i] = (int)light->type;
+            max_distance[i] = light->max_dist;
+            angle[i] = light->angle;
+            cone_angle_cosine[i] = cos(light->cone_angle * DEG2RAD);
+            cone_exp[i] = light->cone_exp;
+            light_direction[i] = light->model.rotateVector(Vector3(0, 0, 1)).normalize();
+            target[i] = light->target;
+        }
         
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_ONE, GL_ONE);
-        
-        shader->setUniform("u_ambient_light", Vector3());
-        //tell shader to not add alpha
-        shader->setUniform("u_use_alpha", false);
-        //std::cout << i;
     }
-
 
 	//disable shader
 

@@ -43,6 +43,45 @@ void main()
 	gl_Position = u_viewprojection * vec4( v_world_position, 1.0 );
 }
 
+\advanced.vs
+
+
+attribute vec3 a_vertex;
+attribute vec3 a_normal;
+attribute vec2 a_coord;
+attribute vec4 a_color;
+
+uniform vec3 u_camera_pos;
+
+uniform mat4 u_model;
+uniform mat4 u_viewprojection;
+
+//this will store the color for the pixel shader
+varying vec3 v_position;
+varying vec3 v_world_position;
+varying vec3 v_normal;
+varying vec2 v_uv;
+varying vec4 v_color;
+
+void main()
+{
+    //calcule the normal in camera space (the NormalMatrix is like ViewMatrix but without traslation)
+    v_normal = (u_model * vec4( a_normal, 0.0) ).xyz;
+    
+    //calcule the vertex in object space
+    v_position = a_vertex;
+    v_world_position = (u_model * vec4( v_position, 1.0) ).xyz;
+    
+    //store the color in the varying var to use it from the pixel shader
+    v_color = a_color;
+
+    //store the texture coordinates
+    v_uv = a_coord;
+
+    //calcule the position of the vertex using the matrices
+    gl_Position = u_viewprojection * vec4( v_world_position, 1.0 );
+}
+
 \flat.fs
 
 
@@ -92,7 +131,11 @@ varying vec4 v_color;
 uniform vec3 u_camera_pos;
 
 uniform vec4 u_color;
-uniform sampler2D u_texture;
+uniform sampler2D u_color_texture;
+uniform sampler2D u_emissive_texture;
+uniform sampler2D u_metallic_texture;
+uniform sampler2D u_normal_texture;
+uniform sampler2D u_occlusion_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
@@ -131,12 +174,13 @@ void main()
         
     vec2 uv = v_uv;
     vec4 color = u_color;
-    color *= texture2D( u_texture, uv );
+    color *= texture2D( u_color_texture, uv );
     
     if(color.a < u_alpha_cutoff)
         discard;
         
-    vec3 light = u_ambient_light;
+    //use occlusion for ambient light
+    vec3 light = u_ambient_light * texture2D (u_occlusion_texture, uv).xyz;
     
     //very important to normalize as they come
     //interpolated so normalization is lost
@@ -171,9 +215,9 @@ void main()
     //store the amount of diffuse light
     light += u_light_color * NdotL * att_factor * spot_factor;
 
-    // if it is the first pass we use the color alpha. If not we set it to 0 to avoid adding alpha
+    // if it is the first pass we use the color alpha. If not we set it to 0 to avoid adding anything that should be only added once
     float alpha = u_use_alpha ? color.a : 0.0;
-    gl_FragColor = vec4(color.xyz * light, alpha);
+    gl_FragColor = vec4(color.xyz * light, alpha) + vec4(texture2D (u_emissive_texture, uv).xyz, alpha);
 }
 
 \singlephong.fs
@@ -187,7 +231,7 @@ varying vec4 v_color;
 uniform vec3 u_camera_pos;
 
 uniform vec4 u_color;
-uniform sampler2D u_texture;
+uniform sampler2D u_color_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
@@ -196,7 +240,7 @@ void main()
     vec2 uv = v_uv;
     vec3 L = u_camera_pos - v_world_position;
     vec4 color = u_color;
-    color *= texture2D( u_texture, uv );
+    color *= texture2D( u_color_texture, uv );
 
     if(color.a < u_alpha_cutoff)
         discard;
