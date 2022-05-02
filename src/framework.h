@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <cmath>
+#include <iostream>
 
 #ifndef PI
 	#define PI 3.14159265359
@@ -123,6 +124,17 @@ public:
 	void operator *= (float v) { x *= v; y *= v; z *= v; }
 	void operator /= (float v) { x /= v; y /= v; z /= v; }
 	void operator = (float* v) { x = v[0]; y = v[1]; z = v[2]; }
+    
+    friend auto operator<<(std::ostream &os, Vector3 const &vector) -> std::ostream&{
+        return os <<
+        "(" <<
+        vector.x <<
+        ", " <<
+        vector.y <<
+        ", " <<
+        vector.z <<
+        ")";
+    }
 };
 
 Vector3 normalize(Vector3 n);

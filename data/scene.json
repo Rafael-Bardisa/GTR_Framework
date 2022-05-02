@@ -2,8 +2,12 @@
 	"background_color":[0.01,0.01,0.1],
 	"ambient_light":[0.1,0.1,0.2],
 	"environment":"night.hdre",
-	"camera_position":[-300,90,-150],
-	"camera_target":[0,40,0],
+	"camera_position":[-222.649, 72.0994, -190.464],
+	"camera_target":[60.9271, 31.3423, -9.01558],
+    
+    "camera_position_default":[-300,90,-150],
+    "camera_target_default":[0,40,0],
+    
 	"camera_fov":60,
 	"entities":[
 		{
@@ -63,8 +67,8 @@
 			"color":[1,0.9,0.8],
 			"intensity":10,
 			"max_dist":1000,
-			"cone_angle":45,
-			"cone_exp":60,
+			"cone_angle":60,
+			"cone_exp":20,
 			"light_type":"SPOT",
 			"cast_shadows": true,
 			"shadow_bias": 0.001
@@ -89,17 +93,17 @@
 			"max_dist":70,
 			"light_type":"POINT"
 		},
-		{
-			"name":"moonlight",
-			"type":"LIGHT",
-			"position":[150,300,50],
-			"target":[-80,0,-50],
-			"color":[0.1,0.2,0.4],
-			"intensity":1.5,
-			"area_size":1500,
-			"max_dist":1000,
-			"cast_shadows": true,
-			"light_type":"DIRECTIONAL"
-		}
+        {
+            "name":"moonlight",
+            "type":"LIGHT",
+            "position":[150,300,50],
+            "target":[-80,600,-50],
+            "color":[0.1,0.2,0.4],
+            "intensity":1.5,
+            "area_size":1500,
+            "max_dist":1000,
+            "cast_shadows": true,
+            "light_type":"DIRECTIONAL"
+        }
 	]
 }

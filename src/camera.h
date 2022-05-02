@@ -41,7 +41,7 @@ public:
 	Matrix44 viewprojection_matrix;
 
 	Camera();
-
+    
 	//set as current
 	void enable();
 	void renderInMenu();

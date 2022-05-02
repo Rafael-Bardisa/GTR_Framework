@@ -1,6 +1,8 @@
 //example of some shaders compiled
 flat basic.vs flat.fs
 texture basic.vs texture.fs
+multiphong basic.vs multiphong.fs
+singlephong basic.vs singlephong.fs
 
 \basic.vs
 
@@ -75,6 +77,131 @@ void main()
 		discard;
 
 	gl_FragColor = color;
+}
+
+\multiphong.fs
+
+//multipass phong
+
+varying vec3 v_position;
+varying vec3 v_world_position;
+varying vec3 v_normal;
+varying vec2 v_uv;
+varying vec4 v_color;
+
+uniform vec3 u_camera_pos;
+
+uniform vec4 u_color;
+uniform sampler2D u_texture;
+uniform float u_time;
+uniform float u_alpha_cutoff;
+
+//from the light types
+uniform int u_light_type;
+
+uniform vec3 u_ambient_light;
+
+uniform vec3 u_light_position;
+uniform vec3 u_light_color;
+uniform vec3 u_light_direction;
+
+
+uniform float u_max_distance;
+
+uniform float u_cone_angle_cos;
+uniform float u_cone_exp;
+
+uniform bool u_use_alpha;
+
+float spot_factor(vec3 light_direction, vec3 L, float cos_limit, float cone_exp){
+        float light_dot = -dot(light_direction, L);
+        if (light_dot < cos_limit){
+            return 0.0;
+            }
+        else{
+            light_dot = (light_dot - cos_limit)/(1.0-cos_limit);
+            return pow(light_dot, cone_exp);
+        }
+}
+
+void main()
+{
+    if (u_light_type == 0)
+        discard;
+        
+    vec2 uv = v_uv;
+    vec4 color = u_color;
+    color *= texture2D( u_texture, uv );
+    
+    if(color.a < u_alpha_cutoff)
+        discard;
+        
+    vec3 light = u_ambient_light;
+    
+    //very important to normalize as they come
+    //interpolated so normalization is lost
+    vec3 N = normalize( v_normal );
+    
+    float att_factor = 1.0;
+    vec3 L = u_light_direction;
+    
+    if (u_light_type != 3){
+    //compute att factor and L if light is not directional
+        L = u_light_position - v_world_position;
+        float light_distance = length(L);
+        L /= light_distance;
+        
+        att_factor =  u_max_distance - light_distance;
+        att_factor = max(att_factor / u_max_distance, 0.0);
+        att_factor = pow(att_factor, 2.0);
+    }else{
+    L = normalize(L);
+    }
+
+
+
+    float NdotL = clamp(dot(N, L), 0.0, 1.0);
+    float spot_factor = 1.0;
+    
+    if (u_light_type == 2){
+    //spot factor if light is spot
+    spot_factor = spot_factor(u_light_direction, L, u_cone_angle_cos, u_cone_exp);
+    }
+
+    //store the amount of diffuse light
+    light += u_light_color * NdotL * att_factor * spot_factor;
+
+    // if it is the first pass we use the color alpha. If not we set it to 0 to avoid adding alpha
+    float alpha = u_use_alpha ? color.a : 0.0;
+    gl_FragColor = vec4(color.xyz * light, alpha);
+}
+
+\singlephong.fs
+
+varying vec3 v_position;
+varying vec3 v_world_position;
+varying vec3 v_normal;
+varying vec2 v_uv;
+varying vec4 v_color;
+
+uniform vec3 u_camera_pos;
+
+uniform vec4 u_color;
+uniform sampler2D u_texture;
+uniform float u_time;
+uniform float u_alpha_cutoff;
+
+void main()
+{
+    vec2 uv = v_uv;
+    vec3 L = u_camera_pos - v_world_position;
+    vec4 color = u_color;
+    color *= texture2D( u_texture, uv );
+
+    if(color.a < u_alpha_cutoff)
+        discard;
+
+    gl_FragColor = color;
 }
 
 \quad.vs

@@ -35,7 +35,7 @@ namespace GTR {
 		eEntityType entity_type;
 		Matrix44 model;
 		bool visible;
-		BaseEntity() { entity_type = NONE; visible = true; }
+        BaseEntity() { entity_type = NONE; visible = true; scene = nullptr;}
 		virtual ~BaseEntity() {}
 		virtual void renderInMenu();
 		virtual void configure(cJSON* json) {}
@@ -48,10 +48,38 @@ namespace GTR {
 		std::string filename;
 		Prefab* prefab;
 		
-		PrefabEntity();
+        PrefabEntity();
 		virtual void renderInMenu();
 		virtual void configure(cJSON* json);
 	};
+
+    //represents one light in the scene
+    enum eLightType {UNKNOWN = 0, POINT = 1, SPOT = 2, DIRECTIONAL = 3};
+
+    class LightEntity : public GTR::BaseEntity
+    {
+    public:
+        eLightType type;
+        Vector3 color;
+        float angle;
+        float intensity;
+        
+        float area_size;
+        
+        float max_dist;
+        float cone_angle;
+        float cone_exp;
+        
+        Vector3 target;
+        
+        bool cast_shadows;
+        float shadow_bias;
+        
+        
+        LightEntity();
+        virtual void renderInMenu();
+        virtual void configure(cJSON* json);
+    };
 
 	//contains all entities of the scene
 	class Scene

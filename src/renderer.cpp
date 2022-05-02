@@ -9,7 +9,8 @@
 #include "utils.h"
 #include "scene.h"
 #include "extra/hdre.h"
-
+#include <cmath>
+#include <math.h>
 
 using namespace GTR;
 
@@ -23,15 +24,20 @@ bool GTR::renderPriority(const RenderInstruct& first, const RenderInstruct& seco
     return ((renderFactor(first.material->alpha_mode) / first.distance) < (renderFactor(second.material->alpha_mode) / second.distance));
 }
 
+Renderer::Renderer(){
+    num_lights = 0;
+}
 // upgraded this mofo
 // ordered, something weird with colors before loading textures
 void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
 {
+    current_scene = scene;
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
     
-    //empty node list
-    nodes.clear();
+    //empty instructions and lights list
+    instructions.clear();
+    lights.clear();
 
 	// Clear the color and the depth buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -51,13 +57,19 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
 			if(pent->prefab)
 				renderPrefab(ent->model, pent->prefab, camera);
 		}
+        else if (ent->entity_type == LIGHT){
+            lights.push_back((GTR::LightEntity*)ent);
+        }
 	}
+    num_lights = lights.size();
     // sort node vector by priority
-    std::sort(nodes.begin(), nodes.end(), GTR::renderPriority);
+    std::sort(instructions.begin(), instructions.end(), GTR::renderPriority);
 
     // render nodes by priority
-    for(auto node = nodes.begin(); node != nodes.end(); node++) {
-        renderMeshWithMaterial( node->model, node->mesh, node->material, camera);
+    
+    //each node rendered with all the lights
+    for(auto instruction = instructions.begin(); instruction != instructions.end(); instruction++) {
+        renderInstruction(*instruction, camera);
        }
 }
 
@@ -91,7 +103,7 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
             // compare (a, b) is: a before b?
 
             // new RenderInstruct, must add to cool vector
-            nodes.push_back(RenderInstruct( node_model, node->mesh, node->material, camera->eye.distance(world_bounding.center)));
+            instructions.push_back(RenderInstruct( node_model, node->mesh, node->material, camera->eye.distance(world_bounding.center)));
 			//node->mesh->renderBounding(node_model, true);
             
 		}
@@ -102,9 +114,40 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
 		renderNode(prefab_model, node->children[i], camera);
 }
 
+static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader, Texture *texture) {
+    shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
+    shader->setUniform("u_camera_position", camera->eye);
+    shader->setUniform("u_model", model );
+    float t = getTime();
+    shader->setUniform("u_time", t );
+    
+    shader->setUniform("u_color", material->color);
+    if(texture)
+        shader->setUniform("u_texture", texture, 0);
+    
+    //this is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
+    shader->setUniform("u_alpha_cutoff", material->alpha_mode == GTR::eAlphaMode::MASK ? material->alpha_cutoff : 0);
+    shader->setUniform("u_ambient_light", object.current_scene->ambient_light);
+    
+    //use alpha once during blending
+    shader->setUniform("u_use_alpha", true);
+    
+    //select the blending
+    material->alpha_mode == GTR::eAlphaMode::BLEND ? glEnable(GL_BLEND) : glDisable(GL_BLEND);
+    
+    material->alpha_mode == GTR::eAlphaMode::BLEND ?
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) : glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+}
+
 //renders a mesh given its transform and material
 void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera)
 {
+    /*
+     para multipass quitar ambient despues de primera iter
+     glblend (src alpha, gl one)
+     
+     aqui se viene el chido
+     */
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material )
 		return;
@@ -112,24 +155,19 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
 
 	//define locals to simplify coding
 	Shader* shader = NULL;
-	Texture* texture = NULL;
+	Texture* color_texture = NULL;
+    Texture* emissive_texture = NULL;
+    Texture* metallic_texture = NULL;
+    Texture* normal_texture = NULL;
+    Texture* occlusion_texture = NULL;
 
-	texture = material->color_texture.texture;
-	//texture = material->emissive_texture;
-	//texture = material->metallic_roughness_texture;
-	//texture = material->normal_texture;
-	//texture = material->occlusion_texture;
-	if (texture == NULL)
-		texture = Texture::getWhiteTexture(); //a 1x1 white texture
-
-	//select the blending
-	if (material->alpha_mode == GTR::eAlphaMode::BLEND)
-	{
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	}
-	else
-		glDisable(GL_BLEND);
+	color_texture = material->color_texture.texture;
+	emissive_texture = material->emissive_texture.texture;
+    metallic_texture = material->metallic_roughness_texture.texture;
+	normal_texture = material->normal_texture.texture;
+	occlusion_texture = material->occlusion_texture.texture;
+	if (color_texture == NULL)
+		color_texture = Texture::getWhiteTexture(); //a 1x1 white texture
 
 	//select if render both sides of the triangles
 	if(material->two_sided)
@@ -139,7 +177,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     assert(glGetError() == GL_NO_ERROR);
 
 	//chose a shader
-	shader = Shader::Get("texture");
+	shader = Shader::Get("multiphong");
 
     assert(glGetError() == GL_NO_ERROR);
 
@@ -149,27 +187,45 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
 	shader->enable();
 
 	//upload uniforms
-	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
-	shader->setUniform("u_camera_position", camera->eye);
-	shader->setUniform("u_model", model );
-	float t = getTime();
-	shader->setUniform("u_time", t );
+    uploadCommonData(*this, camera, material, model, shader, color_texture);
 
-	shader->setUniform("u_color", material->color);
-	if(texture)
-		shader->setUniform("u_texture", texture, 0);
+    
+    glDepthFunc(GL_LEQUAL);
+    
+    for(auto light : lights){
 
-	//this is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
-	shader->setUniform("u_alpha_cutoff", material->alpha_mode == GTR::eAlphaMode::MASK ? material->alpha_cutoff : 0);
+        shader->setUniform("u_light_type", (int)light->type);
+        
+        shader->setUniform("u_light_color", light->color * light->intensity);
+        shader->setUniform("u_light_position", light->model.getTranslation());
+        shader->setUniform("u_max_distance", light->max_dist);
+        float light_angle_cosine = cos(light->cone_angle * DEG2RAD);
+        shader->setUniform("u_cone_angle_cos", light_angle_cosine);
+        shader->setUniform("u_cone_exp", light->cone_exp);
+        shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, 1)).normalize());
 
-	//do the draw call that renders the mesh into the screen
-	mesh->render(GL_TRIANGLES);
+        shader->setUniform("target", light->target);
+        //do the draw call that renders the mesh into the screen
+        mesh->render(GL_TRIANGLES);
+        
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        
+        shader->setUniform("u_ambient_light", Vector3());
+        //tell shader to not add alpha
+        shader->setUniform("u_use_alpha", false);
+        //std::cout << i;
+    }
+
 
 	//disable shader
+
 	shader->disable();
 
 	//set the render state as it was before to avoid problems with future renders
 	glDisable(GL_BLEND);
+    glDepthFunc(GL_LESS);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 

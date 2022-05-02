@@ -126,6 +126,13 @@ void Application::update(double seconds_elapsed)
 	if (Input::isKeyPressed(SDL_SCANCODE_S) || Input::isKeyPressed(SDL_SCANCODE_DOWN)) camera->move(Vector3(0.0f, 0.0f,-1.0f) * speed);
 	if (Input::isKeyPressed(SDL_SCANCODE_A) || Input::isKeyPressed(SDL_SCANCODE_LEFT)) camera->move(Vector3(1.0f, 0.0f, 0.0f) * speed);
 	if (Input::isKeyPressed(SDL_SCANCODE_D) || Input::isKeyPressed(SDL_SCANCODE_RIGHT)) camera->move(Vector3(-1.0f, 0.0f, 0.0f) * speed);
+    if (Input::isKeyPressed(SDL_SCANCODE_C)){
+        std::cout <<
+        "CAMERA POSITION: " <<
+         camera->eye << "\n" <<
+        "CAMERA CENTER: " <<
+         camera->center << "\n";
+    }
 
 	//mouse input to rotate the cam
 	#ifndef SKIP_IMGUI

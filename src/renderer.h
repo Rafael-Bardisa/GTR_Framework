@@ -34,10 +34,14 @@ namespace GTR {
 	{
         
 	public:
-        std::vector<RenderInstruct> nodes;
+        std::vector<RenderInstruct> instructions;
+        std::vector<GTR::LightEntity*> lights;
+        int num_lights;
+        Scene* current_scene;
 		//add here your functions
 		//...
         
+        Renderer();
 
 		//renders several elements of the scene
 		void renderScene(GTR::Scene* scene, Camera* camera);
@@ -50,6 +54,12 @@ namespace GTR {
 
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera);
+        //to render one mesh with render instruction
+        inline void renderInstruction(const RenderInstruct instruction, Camera* camera){
+            renderMeshWithMaterial(instruction.model,
+                                   instruction.mesh,
+                                   instruction.material,
+                                   camera);};
 	};
 
 	Texture* CubemapFromHDRE(const char* filename);

@@ -127,6 +127,10 @@ GTR::BaseEntity* GTR::Scene::createEntity(std::string type)
 {
 	if (type == "PREFAB")
 		return new GTR::PrefabEntity();
+    
+    else if (type == "LIGHT")
+        return new GTR::LightEntity();
+    
     return NULL;
 }
 
@@ -147,6 +151,25 @@ GTR::PrefabEntity::PrefabEntity()
 {
 	entity_type = PREFAB;
 	prefab = NULL;
+}
+
+GTR::LightEntity::LightEntity()
+{
+    //default values
+    entity_type = LIGHT;
+    color = Vector3(1,1,1);
+    intensity = 1;
+    angle = 0;
+    target = Vector3(1, 1, 1);
+    
+    area_size = 100;
+    
+    max_dist = 100;
+    cone_angle = 30;
+    cone_exp = 60;
+    
+    cast_shadows = false;
+    shadow_bias = 0;
 }
 
 void GTR::PrefabEntity::configure(cJSON* json)
@@ -172,3 +195,53 @@ void GTR::PrefabEntity::renderInMenu()
 #endif
 }
 
+void GTR::LightEntity::configure(cJSON* json)
+{
+
+    std::string type_str = readJSONString(json, "light_type", "");
+    
+    if (type_str == "SPOT"){
+        type = SPOT;
+    }
+    else if (type_str == "POINT"){
+        type = POINT;
+    }
+    else if (type_str == "DIRECTIONAL"){
+        type =  DIRECTIONAL;
+    }
+    else {
+        type = UNKNOWN;
+    }
+    
+    this->color = readJSONVector3(json, "color", color);
+    this->intensity = readJSONNumber(json, "intensity", intensity);
+    this->angle = readJSONNumber(json, "angle", angle);
+    
+    this->area_size = readJSONNumber(json, "area_size", area_size);
+    
+    this->max_dist = readJSONNumber(json, "max_dist", max_dist);
+    this->cone_angle = readJSONNumber(json, "cone_angle", cone_angle);
+    this->cone_exp = readJSONNumber(json, "cone_exp", cone_exp);
+    
+    this->target = readJSONVector3(json, "target", target);
+    
+    this-> cast_shadows = (readJSONString(json, "cast_shadows", "") == "true") ? true : false;
+    this->shadow_bias = readJSONNumber(json, "shadow_bias", shadow_bias);
+    
+    /*
+     "color":[1,0.9,0.8],
+     "intensity":10,
+     "max_dist":1000,
+     "cone_angle":45,
+     "cone_exp":60,
+     "light_type":"SPOT",
+     "cast_shadows": true,
+     "shadow_bias": 0.001
+     */
+
+}
+
+void GTR::LightEntity::renderInMenu()
+{
+    BaseEntity::renderInMenu();
+}

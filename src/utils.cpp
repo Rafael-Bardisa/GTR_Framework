@@ -544,6 +544,7 @@ bool readJSONVector(cJSON* obj, const char* name, std::vector<float>& dst)
 Vector3 readJSONVector3(cJSON* obj, const char* name, Vector3 default_value)
 {
 	std::vector<float> dst;
+    dst.resize(3);
 	if (readJSONVector(obj, name, dst))
 	{
 		if (dst.size() == 3)
