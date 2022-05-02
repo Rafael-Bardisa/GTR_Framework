@@ -123,17 +123,20 @@ static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::M
     shader->setUniform("u_time", t );
     
     shader->setUniform("u_color", material->color);
-    if(color_texture)
-        shader->setUniform("u_color_texture", color_texture, 0);
+    Texture* to_send = color_texture ? color_texture : Texture::getBlackTexture();
+    shader->setUniform("u_color_texture", to_send, 0);
     
-    if(emissive_texture)
-        shader->setUniform("u_emissive_texture", emissive_texture, 1);
-    if(metallic_texture)
-        shader->setUniform("u_metallic_texture", metallic_texture, 2);
-    if(normal_texture)
-        shader->setUniform("u_normal_texture", normal_texture, 3);
-    if(occlusion_texture)
-        shader->setUniform("u_occlusion_texture", occlusion_texture, 4);
+    to_send = emissive_texture ? emissive_texture : Texture::getBlackTexture();
+    shader->setUniform("u_emissive_texture", to_send, 1);
+    
+    to_send = metallic_texture ? metallic_texture : Texture::getBlackTexture();
+    shader->setUniform("u_metallic_texture", to_send, 2);
+    
+    to_send = normal_texture ? normal_texture : Texture::getBlackTexture();
+    shader->setUniform("u_normal_texture", to_send, 3);
+    
+    to_send = occlusion_texture ? occlusion_texture : Texture::getBlackTexture();
+    shader->setUniform("u_occlusion_texture", to_send, 4);
     
     
     //this is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
