@@ -54,6 +54,7 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
 
 
 	for (int i = 0; i < scene->entities.size(); ++i)
+        // get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized
 	{
 		BaseEntity* ent = scene->entities[i];
 		if (!ent->visible)
@@ -98,6 +99,7 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
     
     //each node rendered with all the lights
     for(auto instruction = instructions.begin(); instruction != instructions.end(); instruction++) {
+        if (camera->testBoxInFrustum(instruction->bounding_box.center, instruction->bounding_box.halfsize))
         renderInstruction(*instruction, camera);
        }
     //showShadowmap(lights[0]);
@@ -162,16 +164,16 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
 		BoundingBox world_bounding = transformBoundingBox(node_model,node->mesh->box);
 		
 		//if bounding box is inside the camera frustum then the object is probably visible
-		if (camera->testBoxInFrustum(world_bounding.center, world_bounding.halfsize) )
-		{
+		//if (camera->testBoxInFrustum(world_bounding.center, world_bounding.halfsize) )
+		//{
 			//render node mesh
             // compare (a, b) is: a before b?
 
             // new RenderInstruct, must add to cool vector
-            instructions.push_back(RenderInstruct( node_model, node->mesh, node->material, camera->eye.distance(world_bounding.center)));
+            instructions.push_back(RenderInstruct( node_model, node->mesh, node->material, camera->eye.distance(world_bounding.center), world_bounding));
 			//node->mesh->renderBounding(node_model, true);
             
-		}
+		//}
 	}
 
 	//iterate recursively with children
@@ -228,11 +230,16 @@ void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
         float light_angle_cosine = cos(light->cone_angle * DEG2RAD);
         shader->setUniform("u_cone_angle_cos", light_angle_cosine);
         shader->setUniform("u_cone_exp", light->cone_exp);
-        shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, 1)).normalize());
+        shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, -1)).normalize());
         
         shader->setUniform("u_target", light->target);
-        shader->setUniform("u_cast_shadows", light->cast_shadows);
-        shader->setUniform("u_shadow_bias", light->shadow_bias);
+        if (light->shadow_map){
+            shader->setUniform("u_cast_shadows", light->cast_shadows);
+            shader->setUniform("u_shadow_bias", light->shadow_bias);
+            shader->setUniform("u_shadow_map", light->shadow_map, 15);
+            shader->setUniform("u_light_viewprojection", light->light_camera->viewprojection_matrix);
+            
+        }
         //do the draw call that renders the mesh into the screen
         mesh->render(GL_TRIANGLES);
         
@@ -258,6 +265,8 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
     Vector3 target[MAX_LIGHTS];
     bool cast_shadows[MAX_LIGHTS];
     float shadow_bias[MAX_LIGHTS];
+    Texture shadowmap[MAX_LIGHTS];
+    Matrix44 light_viewprojection[MAX_LIGHTS];
     //do the draw call that renders the mesh into the screen
     for (int i = 0; i < num_lights; i++){
         LightEntity* light = lights[i];
@@ -268,10 +277,12 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
         angle[i] = light->angle;
         cone_angle_cosine[i] = cos(light->cone_angle * DEG2RAD);
         cone_exp[i] = light->cone_exp;
-        light_direction[i] = light->model.rotateVector(Vector3(0, 0, 1)).normalize();
+        light_direction[i] = light->model.rotateVector(Vector3(0, 0, -1)).normalize();
         target[i] = light->target;
         cast_shadows[i] = light->cast_shadows;
         shadow_bias[i] = light->shadow_bias;
+        //shadowmap[i] = *light->shadow_map;
+        //light_viewprojection[i] = light->light_camera->viewprojection_matrix;
     }
     shader->setUniform("u_num_lights", num_lights);
     shader->setUniform3Array("u_light_position", (float*)&positions, MAX_LIGHTS);

@@ -20,12 +20,14 @@ namespace GTR {
         Mesh* mesh;
         GTR::Material* material;
         float distance;
+        BoundingBox bounding_box;
         
-        RenderInstruct(Matrix44 model, Mesh* mesh, GTR::Material* material, float distance){
+        RenderInstruct(Matrix44 model, Mesh* mesh, GTR::Material* material, float distance, BoundingBox bounding_box){
             this->model = model;
             this->mesh = mesh;
             this->material = material;
             this->distance = distance;
+            this->bounding_box = bounding_box;
         }
     };
 	
