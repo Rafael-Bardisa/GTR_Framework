@@ -1,6 +1,6 @@
 #include "scene.h"
 #include "utils.h"
-
+#include "fbo.h"
 #include "prefab.h"
 #include "extra/cJSON.h"
 
@@ -170,6 +170,10 @@ GTR::LightEntity::LightEntity()
     
     cast_shadows = false;
     shadow_bias = 0;
+    
+    fbo = nullptr;
+    shadow_map = nullptr;
+    light_camera = nullptr;
 }
 
 void GTR::PrefabEntity::configure(cJSON* json)
@@ -225,7 +229,7 @@ void GTR::LightEntity::configure(cJSON* json)
     
     this->target = readJSONVector3(json, "target", target);
     
-    this-> cast_shadows = (readJSONString(json, "cast_shadows", "") == "true") ? true : false;
+    this-> cast_shadows = readJSONBool(json, "cast_shadows", false);
     this->shadow_bias = readJSONNumber(json, "shadow_bias", shadow_bias);
     
     /*

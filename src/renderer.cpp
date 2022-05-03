@@ -1,5 +1,5 @@
 #include "renderer.h"
-
+#include "fbo.h"
 #include "camera.h"
 #include "shader.h"
 #include "mesh.h"
@@ -28,6 +28,14 @@ bool GTR::renderPriority(const RenderInstruct& first, const RenderInstruct& seco
 Renderer::Renderer(){
     num_lights = 0;
 }
+
+void Renderer::showShadowmap(LightEntity* light) {
+    Shader* shader = Shader::getDefaultShader("depth");
+    shader->enable();
+    shader->setUniform("u_camera_nearfar", Vector2(light->light_camera->near_plane, light->light_camera->far_plane));
+    light->shadow_map->toViewport(shader);
+}
+
 // upgraded this mofo
 // ordered, something weird with colors before loading textures
 void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
@@ -59,10 +67,30 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
 				renderPrefab(ent->model, pent->prefab, camera);
 		}
         else if (ent->entity_type == LIGHT){
-            lights.push_back((GTR::LightEntity*)ent);
+            auto light_ent = (GTR::LightEntity*)ent;
+            //break out of switch if light outside frustrum, else continue to next entity
+            switch(light_ent->type){
+                case UNKNOWN:
+                    continue;
+                case POINT:
+                    //if (camera->testSphereInFrustum(light_ent->model * Vector3(), light_ent->max_dist))
+                        break;
+                    //continue;
+                case SPOT:
+                    break;
+                case DIRECTIONAL:
+                    break;
+                default:
+                    break;
+                }
+            lights.push_back(light_ent);
         }
 	}
     num_lights = lights.size();
+    
+    for (auto light : lights){
+            generateShadowMap(light);
+    }
     // sort node vector by priority
     std::sort(instructions.begin(), instructions.end(), GTR::renderPriority);
 
@@ -72,6 +100,42 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
     for(auto instruction = instructions.begin(); instruction != instructions.end(); instruction++) {
         renderInstruction(*instruction, camera);
        }
+    //showShadowmap(lights[0]);
+}
+
+void Renderer::generateShadowMap(LightEntity* light){
+    if (!light->cast_shadows) {
+        if (light->fbo){
+            delete light->fbo;
+            light->fbo = nullptr;
+            light->shadow_map = nullptr;
+        }
+        return;
+    }
+    
+    if (!light->fbo){
+        light->fbo = new FBO();
+        light->fbo->setDepthOnly(1024, 1024);
+        light->shadow_map = light->fbo->depth_texture;
+        if(!light->light_camera) light->light_camera = new Camera();
+    }
+    light->fbo->bind();
+    Camera* view_camera = Camera::current;
+    
+    Camera* light_camera = light->light_camera;
+    light_camera->setPerspective(light->cone_angle, 1.0, 0.1, light->max_dist);
+    light_camera->lookAt(light->model * Vector3(), light->model * Vector3(0,0,-1), light->model.rotateVector(Vector3(0,1,0)));
+    light_camera->enable();
+    
+    glClear(GL_DEPTH_BUFFER_BIT);
+    for (auto instruction : instructions){
+        if (instruction.material->alpha_mode == eAlphaMode::BLEND) continue;
+            renderFlatMesh(instruction.model, instruction.mesh, instruction.material, light_camera);
+        
+    }
+    
+    light->fbo->unbind();
+    view_camera->enable();
 }
 
 //adds nodes of prefab to renderer node list
@@ -123,7 +187,7 @@ static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::M
     shader->setUniform("u_time", t );
     
     shader->setUniform("u_color", material->color);
-    Texture* to_send = color_texture ? color_texture : Texture::getBlackTexture();
+    Texture* to_send = color_texture ? color_texture : Texture::getWhiteTexture();
     shader->setUniform("u_color_texture", to_send, 0);
     
     to_send = emissive_texture ? emissive_texture : Texture::getBlackTexture();
@@ -132,10 +196,10 @@ static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::M
     to_send = metallic_texture ? metallic_texture : Texture::getBlackTexture();
     shader->setUniform("u_metallic_texture", to_send, 2);
     
-    to_send = normal_texture ? normal_texture : Texture::getBlackTexture();
+    to_send = normal_texture ? normal_texture : Texture::getBlueTexture();
     shader->setUniform("u_normal_texture", to_send, 3);
     
-    to_send = occlusion_texture ? occlusion_texture : Texture::getBlackTexture();
+    to_send = occlusion_texture ? occlusion_texture : Texture::getWhiteTexture();
     shader->setUniform("u_occlusion_texture", to_send, 4);
     
     
@@ -166,7 +230,9 @@ void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
         shader->setUniform("u_cone_exp", light->cone_exp);
         shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, 1)).normalize());
         
-        shader->setUniform("target", light->target);
+        shader->setUniform("u_target", light->target);
+        shader->setUniform("u_cast_shadows", light->cast_shadows);
+        shader->setUniform("u_shadow_bias", light->shadow_bias);
         //do the draw call that renders the mesh into the screen
         mesh->render(GL_TRIANGLES);
         
@@ -178,6 +244,51 @@ void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
         shader->setUniform("u_use_alpha", false);
         //std::cout << i;
     }
+}
+
+void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
+    Vector3 positions[MAX_LIGHTS];
+    Vector3 light_color[MAX_LIGHTS];
+    int type[MAX_LIGHTS];
+    float max_distance[MAX_LIGHTS];
+    float angle[MAX_LIGHTS];
+    float cone_angle_cosine[MAX_LIGHTS];
+    float cone_exp[MAX_LIGHTS];
+    Vector3 light_direction[MAX_LIGHTS];
+    Vector3 target[MAX_LIGHTS];
+    bool cast_shadows[MAX_LIGHTS];
+    float shadow_bias[MAX_LIGHTS];
+    //do the draw call that renders the mesh into the screen
+    for (int i = 0; i < num_lights; i++){
+        LightEntity* light = lights[i];
+        positions[i] = light->model.getTranslation();
+        light_color[i] = light->color * light->intensity;
+        type[i] = (int)light->type;
+        max_distance[i] = light->max_dist;
+        angle[i] = light->angle;
+        cone_angle_cosine[i] = cos(light->cone_angle * DEG2RAD);
+        cone_exp[i] = light->cone_exp;
+        light_direction[i] = light->model.rotateVector(Vector3(0, 0, 1)).normalize();
+        target[i] = light->target;
+        cast_shadows[i] = light->cast_shadows;
+        shadow_bias[i] = light->shadow_bias;
+    }
+    shader->setUniform("u_num_lights", num_lights);
+    shader->setUniform3Array("u_light_position", (float*)&positions, MAX_LIGHTS);
+    shader->setUniform3Array("u_light_color", (float*)&light_color, MAX_LIGHTS);
+    shader->setUniform1Array("u_light_type", (int*)&type, MAX_LIGHTS);
+    shader->setUniform1Array("u_max_distance", (float*)&max_distance, MAX_LIGHTS);
+    shader->setUniform3Array("u_angle", (float*)&angle, MAX_LIGHTS);
+    shader->setUniform1Array("u_cone_angle_cosine", (float*)&cone_angle_cosine, MAX_LIGHTS);
+    shader->setUniform1Array("u_cone_exp", (float*)&cone_exp, MAX_LIGHTS);
+    
+    shader->setUniform3Array("u_light_direction", (float*)&light_direction, MAX_LIGHTS);
+    shader->setUniform3Array("u_target", (float*)&target, MAX_LIGHTS);
+    
+    shader->setUniform1Array("u_cast_shadows", (int*)&cast_shadows, MAX_LIGHTS);
+    shader->setUniform1Array("u_shadow_bias", (float*)&shadow_bias, MAX_LIGHTS);
+    
+    mesh->render(GL_TRIANGLES);
 }
 
 //renders a mesh given its transform and material
@@ -202,8 +313,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     metallic_texture = material->metallic_roughness_texture.texture;
 	normal_texture = material->normal_texture.texture;
 	occlusion_texture = material->occlusion_texture.texture;
-	if (color_texture == NULL)
-		color_texture = Texture::getWhiteTexture(); //a 1x1 white texture
 
 	//select if render both sides of the triangles
 	if(material->two_sided)
@@ -227,36 +336,16 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     uploadCommonData(*this, camera, material, model, shader, color_texture, emissive_texture, metallic_texture, normal_texture, occlusion_texture);
 
     
-    glDepthFunc(GL_LEQUAL);
-    
-    if (multipass)
-        renderMultipass(mesh, shader);
-    else{
-        Vector3 positions[MAX_LIGHTS];
-        Vector3 light_color[MAX_LIGHTS];
-        int type[MAX_LIGHTS];
-        float max_distance[MAX_LIGHTS];
-        float angle[MAX_LIGHTS];
-        float cone_angle_cosine[MAX_LIGHTS];
-        float cone_exp[MAX_LIGHTS];
-        Vector3 light_direction[MAX_LIGHTS];
-        Vector3 target[MAX_LIGHTS];
-        //do the draw call that renders the mesh into the screen
-        for (int i = 0; i < num_lights; i++){
-            LightEntity* light = lights[i];
-            positions[i] = light->model.getTranslation();
-            light_color[i] = light->color;
-            type[i] = (int)light->type;
-            max_distance[i] = light->max_dist;
-            angle[i] = light->angle;
-            cone_angle_cosine[i] = cos(light->cone_angle * DEG2RAD);
-            cone_exp[i] = light->cone_exp;
-            light_direction[i] = light->model.rotateVector(Vector3(0, 0, 1)).normalize();
-            target[i] = light->target;
-        }
-        
-    }
 
+    
+    if (multipass){
+        glDepthFunc(GL_LEQUAL);
+        renderMultipass(mesh, shader);
+    }
+    else{
+        renderSinglepass(mesh, shader);
+    }
+    
 	//disable shader
 
 	shader->disable();
@@ -267,6 +356,47 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
+void Renderer::renderFlatMesh(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera)
+{
+
+    //in case there is nothing to do
+    if (!mesh || !mesh->getNumVertices() || !material )
+        return;
+    assert(glGetError() == GL_NO_ERROR);
+
+    //define locals to simplify coding
+    Shader* shader = NULL;
+    
+    //select if render both sides of the triangles
+    if(material->two_sided)
+        glDisable(GL_CULL_FACE);
+    else
+        glEnable(GL_CULL_FACE);
+    assert(glGetError() == GL_NO_ERROR);
+
+    //chose a shader
+    shader = Shader::Get("flat");
+
+    assert(glGetError() == GL_NO_ERROR);
+
+    //no shader? then nothing to render
+    if (!shader)
+        return;
+    shader->enable();
+
+    //upload uniforms
+    shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
+    shader->setUniform("u_model", model);
+    shader->setUniform("u_alpha_cutoff", material->alpha_mode == GTR::eAlphaMode::MASK ? material->alpha_cutoff : 0);
+    
+    glDisable(GL_BLEND);
+    glDepthFunc(GL_LESS);
+    
+    //disable shader
+    mesh->render(GL_TRIANGLES);
+
+    shader->disable();
+}
 
 Texture* GTR::CubemapFromHDRE(const char* filename)
 {

@@ -44,7 +44,9 @@ namespace GTR {
         
         Renderer();
 
-		//renders several elements of the scene
+        void extracted();
+        
+//renders several elements of the scene
 		void renderScene(GTR::Scene* scene, Camera* camera);
 	
 		//to render a whole prefab (with all its nodes)
@@ -54,15 +56,28 @@ namespace GTR {
 		void renderNode(const Matrix44& model, GTR::Node* node, Camera* camera);
 
         void renderMultipass(Mesh *mesh, Shader *shader);
+        void renderSinglepass(Mesh *mesh, Shader *shader);
+        
+        void extracted(Mesh *mesh, bool multipass, Shader *shader);
+        
+        void extracted(Texture *&color_texture, Texture *&emissive_texture, GTR::Material *material, Mesh *mesh, Texture *&metallic_texture, bool &multipass, Texture *&normal_texture, Texture *&occlusion_texture, Shader *&shader);
+        
+        void extracted(GTR::Material *material, Mesh *mesh, bool multipass, Shader *shader);
+        
+        void extracted(Shader *shader);
         
 //to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera);
         //to render one mesh with render instruction
+        void renderFlatMesh(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera);
         inline void renderInstruction(const RenderInstruct instruction, Camera* camera){
             renderMeshWithMaterial(instruction.model,
                                    instruction.mesh,
                                    instruction.material,
                                    camera);};
+        
+        void generateShadowMap(LightEntity* light);
+        void showShadowmap(LightEntity* light);
 	};
 
 	Texture* CubemapFromHDRE(const char* filename);

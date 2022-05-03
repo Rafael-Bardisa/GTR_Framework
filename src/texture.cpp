@@ -570,6 +570,16 @@ Texture* Texture::getWhiteTexture()
     return white;
 }
 
+Texture* Texture::getBlueTexture()
+{
+    static Texture* blue = NULL;
+    if (blue)
+        return blue;
+    const Uint8 data[3] = { 0,0,255 };
+    blue = new Texture(1, 1, GL_RGB, GL_UNSIGNED_BYTE, true, (Uint8*)data);
+    return blue;
+}
+
 void Texture::copyTo(Texture* destination, Shader* shader)
 {
     if (!destination) //to current viewport

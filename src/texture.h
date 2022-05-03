@@ -185,6 +185,8 @@ public:
     static FBO* getGlobalFBO(Texture* texture);
     static Texture* getBlackTexture();
     static Texture* getWhiteTexture();
+    //blue is default value for tangent maps
+    static Texture* getBlueTexture();
 };
 
 bool isPowerOfTwo(int n);

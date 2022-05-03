@@ -3,6 +3,7 @@ flat basic.vs flat.fs
 texture basic.vs texture.fs
 multiphong basic.vs multiphong.fs
 singlephong basic.vs singlephong.fs
+depth quad.vs depth.fs
 
 \basic.vs
 
@@ -41,45 +42,6 @@ void main()
 
 	//calcule the position of the vertex using the matrices
 	gl_Position = u_viewprojection * vec4( v_world_position, 1.0 );
-}
-
-\advanced.vs
-
-
-attribute vec3 a_vertex;
-attribute vec3 a_normal;
-attribute vec2 a_coord;
-attribute vec4 a_color;
-
-uniform vec3 u_camera_pos;
-
-uniform mat4 u_model;
-uniform mat4 u_viewprojection;
-
-//this will store the color for the pixel shader
-varying vec3 v_position;
-varying vec3 v_world_position;
-varying vec3 v_normal;
-varying vec2 v_uv;
-varying vec4 v_color;
-
-void main()
-{
-    //calcule the normal in camera space (the NormalMatrix is like ViewMatrix but without traslation)
-    v_normal = (u_model * vec4( a_normal, 0.0) ).xyz;
-    
-    //calcule the vertex in object space
-    v_position = a_vertex;
-    v_world_position = (u_model * vec4( v_position, 1.0) ).xyz;
-    
-    //store the color in the varying var to use it from the pixel shader
-    v_color = a_color;
-
-    //store the texture coordinates
-    v_uv = a_coord;
-
-    //calcule the position of the vertex using the matrices
-    gl_Position = u_viewprojection * vec4( v_world_position, 1.0 );
 }
 
 \flat.fs
@@ -156,15 +118,48 @@ uniform float u_cone_exp;
 
 uniform bool u_use_alpha;
 
+uniform bool u_cast_shadows;
+uniform float u_shadow_bias;
+
 float spot_factor(vec3 light_direction, vec3 L, float cos_limit, float cone_exp){
-        float light_dot = -dot(light_direction, L);
-        if (light_dot < cos_limit){
-            return 0.0;
-            }
-        else{
-            light_dot = (light_dot - cos_limit)/(1.0-cos_limit);
-            return pow(light_dot, cone_exp);
+    float light_dot = -dot(light_direction, L);
+    if (light_dot < cos_limit){
+        return 0.0;
         }
+    else{
+        light_dot = (light_dot - cos_limit)/(1.0-cos_limit);
+        return pow(light_dot, cone_exp);
+    }
+}
+
+// the code from the slides
+mat3 cotangent_frame(vec3 N, vec3 p, vec2 uv)
+{
+    // get edge vectors of the pixel triangle
+    vec3 dp1 = dFdx( p );
+    vec3 dp2 = dFdy( p );
+    vec2 duv1 = dFdx( uv );
+    vec2 duv2 = dFdy( uv );
+    
+    // solve the linear system
+    vec3 dp2perp = cross( dp2, N );
+    vec3 dp1perp = cross( N, dp1 );
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+ 
+    // construct a scale-invariant frame
+    float invmax = inversesqrt( max( dot(T,T), dot(B,B) ) );
+    return mat3( T * invmax, B * invmax, N );
+}
+
+// assume N, the interpolated vertex normal and
+// WP the world position
+//vec3 normal_pixel = texture2D( normalmap, uv ).xyz;
+vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
+{
+    normal_pixel = normal_pixel * 255./127. - 128./127.;
+    mat3 TBN = cotangent_frame(N, WP, uv);
+    return normalize(TBN * normal_pixel);
 }
 
 void main()
@@ -184,9 +179,12 @@ void main()
     
     //very important to normalize as they come
     //interpolated so normalization is lost
-    vec3 N = normalize( v_normal );
+    //vec3 N = normalize( v_normal );
+    vec3 N = perturbNormal(v_normal, v_world_position, uv, texture2D( u_normal_texture, uv ).xyz);
+    
     
     float att_factor = 1.0;
+    //hol up
     vec3 L = u_light_direction;
     
     if (u_light_type != 3){
@@ -217,11 +215,13 @@ void main()
 
     // if it is the first pass we use the color alpha. If not we set it to 0 to avoid adding anything that should be only added once
     float alpha = u_use_alpha ? color.a : 0.0;
-    gl_FragColor = vec4(color.xyz * light, alpha) + vec4(texture2D (u_emissive_texture, uv).xyz, alpha);
+    //only add alpha once, else more opaque than it should be
+    gl_FragColor = vec4(color.xyz * light, alpha) + vec4(texture2D (u_emissive_texture, uv).xyz, 0);
 }
 
 \singlephong.fs
 
+const int MAX_LIGHTS = 6;
 varying vec3 v_position;
 varying vec3 v_world_position;
 varying vec3 v_normal;
@@ -232,20 +232,124 @@ uniform vec3 u_camera_pos;
 
 uniform vec4 u_color;
 uniform sampler2D u_color_texture;
+uniform sampler2D u_emissive_texture;
+uniform sampler2D u_metallic_texture;
+uniform sampler2D u_normal_texture;
+uniform sampler2D u_occlusion_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
+
+//from the light types
+uniform int u_light_type[MAX_LIGHTS];
+
+uniform vec3 u_ambient_light;
+
+uniform vec3 u_light_position[MAX_LIGHTS];
+uniform vec3 u_light_color[MAX_LIGHTS];
+uniform vec3 u_light_direction[MAX_LIGHTS];
+
+
+uniform float u_max_distance[MAX_LIGHTS];
+
+uniform float u_cone_angle_cos[MAX_LIGHTS];
+uniform float u_cone_exp[MAX_LIGHTS];
+
+uniform int u_num_lights;
+
+uniform bool u_cast_shadows[MAX_LIGHTS];
+uniform float u_shadow_bias[MAX_LIGHTS];
+
+float spot_factor(vec3 light_direction, vec3 L, float cos_limit, float cone_exp){
+        float light_dot = -dot(light_direction, L);
+        if (light_dot < cos_limit){
+            return 0.0;
+        }
+        else{
+            light_dot = (light_dot - cos_limit)/(1.0-cos_limit);
+            return pow(light_dot, cone_exp);
+        }
+}
+
+//the code from the slides
+mat3 cotangent_frame(vec3 N, vec3 p, vec2 uv)
+{
+    // get edge vectors of the pixel triangle
+    vec3 dp1 = dFdx( p );
+    vec3 dp2 = dFdy( p );
+    vec2 duv1 = dFdx( uv );
+    vec2 duv2 = dFdy( uv );
+    
+    // solve the linear system
+    vec3 dp2perp = cross( dp2, N );
+    vec3 dp1perp = cross( N, dp1 );
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+ 
+    // construct a scale-invariant frame
+    float invmax = inversesqrt( max( dot(T,T), dot(B,B) ) );
+    return mat3( T * invmax, B * invmax, N );
+}
+
+// assume N, the interpolated vertex normal and
+// WP the world position
+//vec3 normal_pixel = texture2D( normalmap, uv ).xyz;
+vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
+{
+    normal_pixel = normal_pixel * 255./127. - 128./127.;
+    mat3 TBN = cotangent_frame(N, WP, uv);
+    return normalize(TBN * normal_pixel);
+}
 
 void main()
 {
     vec2 uv = v_uv;
-    vec3 L = u_camera_pos - v_world_position;
     vec4 color = u_color;
     color *= texture2D( u_color_texture, uv );
 
     if(color.a < u_alpha_cutoff)
         discard;
+        
+    //occlusion for ambient light
+    vec3 light = u_ambient_light * texture2D (u_occlusion_texture, uv).xyz;
+    
+    vec3 N = perturbNormal(v_normal, v_world_position, v_uv, texture2D( u_normal_texture, uv ).xyz);
+    
+    float att_factor = 1.0;
+    //each light computes NdotL according to their type
+    for( int i = 0; i < MAX_LIGHTS; ++i )
+    {
+        if(i < u_num_lights)
+        {
+        // hol up
+            vec3 L = u_light_direction[i];
+            
+            if(u_light_type[i] != 3){
+                L = u_light_position[i] - v_world_position;
+                float light_distance = length(L);
+                L /= light_distance;
+            
+                att_factor =  u_max_distance[i] - light_distance;
+                att_factor = max(att_factor / u_max_distance[i], 0.0);
+                att_factor = pow(att_factor, 2.0);
+            }else{
+                L = normalize(L);
+            }
+            
+            float NdotL = clamp(dot(N, L), 0.0, 1.0);
+            float spot_factor = 1.0;
+            
+            if (u_light_type[i] == 2){
+                //spot factor if light is spot
+                spot_factor = spot_factor(u_light_direction[i], L, u_cone_angle_cos[i], u_cone_exp[i]);
+            }
+            
+            //store the amount of diffuse light
+            light += u_light_color[i] * NdotL * att_factor * spot_factor;
+        }
+    }
 
-    gl_FragColor = color;
+    //alpha is not modified in single pass so we cool
+    gl_FragColor = vec4(color.xyz * light, color.a) + vec4(texture2D(u_emissive_texture, uv).xyz, 0);
 }
 
 \quad.vs
@@ -293,7 +397,7 @@ void main()
 
 \depth.fs
 
-#version 330 core
+//version 330 core
 
 uniform vec2 u_camera_nearfar;
 uniform sampler2D u_texture; //depth map

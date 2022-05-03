@@ -7,7 +7,8 @@
 
 //forward declaration
 class cJSON; 
-
+class FBO;
+class Texture;
 
 //our namespace
 namespace GTR {
@@ -75,6 +76,9 @@ namespace GTR {
         bool cast_shadows;
         float shadow_bias;
         
+        FBO* fbo;
+        Texture* shadow_map;
+        Camera* light_camera;
         
         LightEntity();
         virtual void renderInMenu();
