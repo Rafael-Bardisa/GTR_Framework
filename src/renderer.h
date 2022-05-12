@@ -35,13 +35,13 @@ namespace GTR {
 	// Separating the render from anything else makes the code cleaner
 	class Renderer
 	{
+    public:
         enum ePipeline{
             FORWARD,
             DEFERRED
         };
         
-        
-	public:
+        FBO* gbuffers;
         ePipeline pipeline;
         std::vector<RenderInstruct> instructions;
         std::vector<GTR::LightEntity*> lights;
@@ -53,7 +53,9 @@ namespace GTR {
         Renderer();
         
         void renderForward(Camera *camera);
-        void renderDeferred(Camera* camera);
+        void show_gbuffers(Camera *camera, int h, int w);
+        
+void renderDeferred(Camera* camera);
         
 //renders several elements of the scene
 		void renderScene(GTR::Scene* scene, Camera* camera);
@@ -65,6 +67,8 @@ namespace GTR {
 		void renderNode(const Matrix44& model, GTR::Node* node, Camera* camera);
 
         void renderMultipass(Mesh *mesh, Shader *shader);
+
+        [[deprecated("I'll use multipass")]]
         void renderSinglepass(Mesh *mesh, Shader *shader);
         
         void uploadCommonData(Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader);

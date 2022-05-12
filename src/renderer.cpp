@@ -30,6 +30,7 @@ bool GTR::renderPriority(const RenderInstruct& first, const RenderInstruct& seco
 Renderer::Renderer(){
     num_lights = 0;
     pipeline = FORWARD;
+    gbuffers = nullptr;
 }
 
 void Renderer::showShadowmap(LightEntity* light) {
@@ -40,15 +41,77 @@ void Renderer::showShadowmap(LightEntity* light) {
 }
 
 void Renderer::renderForward(Camera *camera) {
+#warning TODO hacerlo consistente con otras funciones
     for(auto instruction = instructions.begin(); instruction != instructions.end(); instruction++) {
         if (camera->testBoxInFrustum(instruction->bounding_box.center, instruction->bounding_box.halfsize))
             renderInstruction(*instruction, camera);
     }
 }
 
+
+
+void Renderer::show_gbuffers(Camera *camera, int w, int h) {
+    //remember to disable ztest when rendering quads!
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    
+    //set an area of the screen and render fullscreen quad
+    glViewport(0, h*0.5, w * 0.5, h * 0.5);
+    gbuffers->color_textures[0]->toViewport(); //colorbuffer
+    
+    glViewport(w*0.5, h*0.5, w * 0.5, h * 0.5);
+    gbuffers->color_textures[1]->toViewport(); //normalbuffer
+    
+    //for the depth remember to linearize when displaying it
+    glViewport(0, 0, w * 0.5, h * 0.5);
+    Shader* depth_shader = Shader::getDefaultShader("linear_depth");
+    depth_shader->enable();
+    Vector2 near_far = Vector2(camera->near_plane, camera->far_plane);
+    depth_shader->setUniform("u_camera_nearfar", near_far);
+    gbuffers->depth_texture->toViewport(depth_shader);
+    
+    //set the viewport back to full screen
+    glViewport(0,0,w,h);
+}
+
 void Renderer::renderDeferred(Camera* camera){
     //Gbuffers
-    //crear gbuffer si no existe
+    Application* instance = Application::instance;
+    int w = instance->window_width;
+    int h = instance->window_height;
+    if (!gbuffers){
+    gbuffers = new FBO();
+#warning TODO aligual como mucho 4 buffers o el maximo de datos para no pillar el render
+    gbuffers->create(w, h, 3, GL_RGBA, GL_UNSIGNED_BYTE, true);
+    }
+    //start rendering inside the gbuffers
+    gbuffers->bind();
+
+    //we clear in several passes so we can control the clear color independently for every gbuffer
+
+    //disable all but the GB0 (and the depth)
+    gbuffers->enableSingleBuffer(0);
+
+    //clear GB0 with the color (and depth)
+    glClearColor(0.1,0.1,0.1,1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    //and now enable the second GB to clear it to black
+    gbuffers->enableSingleBuffer(1);
+    glClearColor(0.0, 0.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    //enable all buffers back
+    gbuffers->enableAllBuffers();
+
+    //render everything
+    //...
+
+    //stop rendering to the gbuffers
+    gbuffers->unbind();
+    
+    show_gbuffers(camera, w, h);
+
     //render cada obj con un shader gbuffer
     
     //renderizar a pantalla leyendo de gbuffer
@@ -85,6 +148,7 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
                 case UNKNOWN:
                     continue;
                 case POINT:
+                    //easy check
                     if (camera->testSphereInFrustum(light_ent->model * Vector3(), light_ent->max_dist))
                         break;
                     continue;
@@ -113,10 +177,12 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
         {
             PrefabEntity* pent = (GTR::PrefabEntity*)ent;
             if(pent->prefab)
+#warning TODO renderPrefab should check if prefab receives light from any source or if inside camera frustum
                 renderPrefab(ent->model, pent->prefab, camera);
         }
     }
     
+#warning TODO atlas mejor
     for (auto light : lights){
             generateShadowMap(light);
     }
@@ -126,8 +192,10 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
     // render nodes by priority
     
     //each node rendered with all the lights
-    // here choose pipeline
-    renderForward(camera);
+#warning TODO here choose pipeline
+    pipeline == FORWARD ?
+        renderForward(camera):
+        renderDeferred(camera);
     //showShadowmap(lights[0]);
 }
 
@@ -188,7 +256,7 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
 		//compute the bounding box of the object in world space (by using the mesh bounding box transformed to world space)
 		BoundingBox world_bounding = transformBoundingBox(node_model,node->mesh->box);
 		
-		//if bounding box is inside any camera frustum then the object is probably visible
+#warning TODO if bounding box is inside any camera frustum then the object is probably visible
         //if (std::any_of(lights.begin(), lights.end(), [&world_bounding](LightEntity* light) {light->light_camera->testBoxInFrustum(world_bounding.center, world_bounding.halfsize);})){
 
             instructions.push_back(RenderInstruct( node_model, node->mesh, node->material, camera->eye.distance(world_bounding.center), world_bounding));
