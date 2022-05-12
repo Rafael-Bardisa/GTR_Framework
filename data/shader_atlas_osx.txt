@@ -117,6 +117,7 @@ uniform float u_cone_angle_cos;
 uniform float u_cone_exp;
 
 uniform bool u_use_alpha;
+uniform bool u_use_normalmap;
 
 uniform bool u_cast_shadows;
 uniform sampler2D u_shadowmap;
@@ -209,9 +210,12 @@ void main()
     
     //very important to normalize as they come
     //interpolated so normalization is lost
-    //vec3 N = normalize( v_normal );
-    vec3 N = perturbNormal(v_normal, v_world_position, uv, texture2D( u_normal_texture, uv ).xyz);
+    vec3 N = vec3(0.0);
     
+    if (u_use_normalmap)
+        N = perturbNormal(v_normal, v_world_position, uv, texture2D( u_normal_texture, uv ).xyz);
+    else
+        N = normalize( v_normal );
     
     float att_factor = 1.0;
     //hol up
@@ -239,10 +243,10 @@ void main()
     if (u_light_type == 2){
     //spot factor if light is spot
     spot_factor = spot_factor(u_light_direction, L, u_cone_angle_cos, u_cone_exp);
-    //if(u_cast_shadows){
-    //    shadow_factor = test_shadowmap(v_world_position);
+    if(u_cast_shadows){
+        shadow_factor = test_shadowmap(v_world_position);
     
-    //    }
+        }
     }
 
 
@@ -292,6 +296,7 @@ uniform float u_cone_angle_cos[MAX_LIGHTS];
 uniform float u_cone_exp[MAX_LIGHTS];
 
 uniform int u_num_lights;
+uniform bool u_use_normalmap;
 
 uniform bool u_cast_shadows[MAX_LIGHTS];
 uniform sampler2D u_shadowmap[MAX_LIGHTS];
@@ -378,8 +383,11 @@ void main()
         
     //occlusion for ambient light
     vec3 light = u_ambient_light * texture2D (u_occlusion_texture, uv).xyz;
-    
-    vec3 N = perturbNormal(v_normal, v_world_position, v_uv, texture2D( u_normal_texture, uv ).xyz);
+    vec3 N = vec3(0.0);
+    if(u_use_normalmap)
+        N = perturbNormal(v_normal, v_world_position, v_uv, texture2D( u_normal_texture, uv ).xyz);
+    else
+        N = normalize( v_normal );
     
     float att_factor = 1.0;
     //each light computes NdotL according to their type

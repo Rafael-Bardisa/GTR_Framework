@@ -13,6 +13,8 @@
 #include <math.h>
 #include "application.h"
 
+#warning uso warning para resaltar comentarios en xcode que si no no se ven
+
 using namespace GTR;
 
 float renderFactor(GTR::eAlphaMode mode){
@@ -27,6 +29,7 @@ bool GTR::renderPriority(const RenderInstruct& first, const RenderInstruct& seco
 
 Renderer::Renderer(){
     num_lights = 0;
+    pipeline = FORWARD;
 }
 
 void Renderer::showShadowmap(LightEntity* light) {
@@ -34,6 +37,21 @@ void Renderer::showShadowmap(LightEntity* light) {
     shader->enable();
     shader->setUniform("u_camera_nearfar", Vector2(light->light_camera->near_plane, light->light_camera->far_plane));
     light->shadow_map->toViewport(shader);
+}
+
+void Renderer::renderForward(Camera *camera) {
+    for(auto instruction = instructions.begin(); instruction != instructions.end(); instruction++) {
+        if (camera->testBoxInFrustum(instruction->bounding_box.center, instruction->bounding_box.halfsize))
+            renderInstruction(*instruction, camera);
+    }
+}
+
+void Renderer::renderDeferred(Camera* camera){
+    //Gbuffers
+    //crear gbuffer si no existe
+    //render cada obj con un shader gbuffer
+    
+    //renderizar a pantalla leyendo de gbuffer
 }
 
 // upgraded this mofo
@@ -54,40 +72,50 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
 
 
 	for (int i = 0; i < scene->entities.size(); ++i)
-        // get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized
+    #warning TODO get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized scene
 	{
 		BaseEntity* ent = scene->entities[i];
 		if (!ent->visible)
 			continue;
 
-		//is a prefab!
-		if (ent->entity_type == PREFAB)
-		{
-			PrefabEntity* pent = (GTR::PrefabEntity*)ent;
-			if(pent->prefab)
-				renderPrefab(ent->model, pent->prefab, camera);
-		}
-        else if (ent->entity_type == LIGHT){
+        if (ent->entity_type == LIGHT){
             auto light_ent = (GTR::LightEntity*)ent;
             //break out of switch if light outside frustrum, else continue to next entity
             switch(light_ent->type){
                 case UNKNOWN:
                     continue;
                 case POINT:
-                    //if (camera->testSphereInFrustum(light_ent->model * Vector3(), light_ent->max_dist))
+                    if (camera->testSphereInFrustum(light_ent->model * Vector3(), light_ent->max_dist))
                         break;
-                    //continue;
+                    continue;
                 case SPOT:
                     break;
+                    continue;
                 case DIRECTIONAL:
                     break;
                 default:
-                    break;
+                    continue;
                 }
             lights.push_back(light_ent);
         }
 	}
-    num_lights = lights.size();
+    num_lights = (int)lights.size();
+    
+    for (int i = 0; i < scene->entities.size(); ++i)
+    #warning TODO get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized scene
+    {
+        BaseEntity* ent = scene->entities[i];
+        if (!ent->visible)
+            continue;
+
+        //is a prefab!
+        if (ent->entity_type == PREFAB)
+        {
+            PrefabEntity* pent = (GTR::PrefabEntity*)ent;
+            if(pent->prefab)
+                renderPrefab(ent->model, pent->prefab, camera);
+        }
+    }
     
     for (auto light : lights){
             generateShadowMap(light);
@@ -98,10 +126,8 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
     // render nodes by priority
     
     //each node rendered with all the lights
-    for(auto instruction = instructions.begin(); instruction != instructions.end(); instruction++) {
-        if (camera->testBoxInFrustum(instruction->bounding_box.center, instruction->bounding_box.halfsize))
-        renderInstruction(*instruction, camera);
-       }
+    // here choose pipeline
+    renderForward(camera);
     //showShadowmap(lights[0]);
 }
 
@@ -124,9 +150,8 @@ void Renderer::generateShadowMap(LightEntity* light){
     light->fbo->bind();
     Camera* view_camera = Camera::current;
     
+    light->configCamera();
     Camera* light_camera = light->light_camera;
-    light_camera->setPerspective(light->cone_angle, 1.0, 0.1, light->max_dist);
-    light_camera->lookAt(light->model * Vector3(), light->model * Vector3(0,0,-1), light->model.rotateVector(Vector3(0,1,0)));
     light_camera->enable();
     
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -163,30 +188,34 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
 		//compute the bounding box of the object in world space (by using the mesh bounding box transformed to world space)
 		BoundingBox world_bounding = transformBoundingBox(node_model,node->mesh->box);
 		
-		//if bounding box is inside the camera frustum then the object is probably visible
-		//if (camera->testBoxInFrustum(world_bounding.center, world_bounding.halfsize) )
-		//{
-			//render node mesh
-            // compare (a, b) is: a before b?
+		//if bounding box is inside any camera frustum then the object is probably visible
+        //if (std::any_of(lights.begin(), lights.end(), [&world_bounding](LightEntity* light) {light->light_camera->testBoxInFrustum(world_bounding.center, world_bounding.halfsize);})){
 
-            // new RenderInstruct, must add to cool vector
             instructions.push_back(RenderInstruct( node_model, node->mesh, node->material, camera->eye.distance(world_bounding.center), world_bounding));
+            
+        }
 			//node->mesh->renderBounding(node_model, true);
             
 		//}
-	}
+	
 
 	//iterate recursively with children
 	for (int i = 0; i < node->children.size(); ++i)
 		renderNode(prefab_model, node->children[i], camera);
 }
 
-static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader, Texture *color_texture, Texture *emissive_texture, Texture *metallic_texture, Texture *normal_texture, Texture *occlusion_texture) {
+void Renderer::uploadCommonData(Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader) {
     shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
     shader->setUniform("u_camera_position", camera->eye);
     shader->setUniform("u_model", model );
     float t = getTime();
     shader->setUniform("u_time", t );
+    
+    Texture* color_texture = material->color_texture.texture;
+    Texture* emissive_texture = material->emissive_texture.texture;
+    Texture* normal_texture = material->normal_texture.texture;
+    Texture* metallic_texture = material->metallic_roughness_texture.texture;
+    Texture* occlusion_texture = material->occlusion_texture.texture;
     
     shader->setUniform("u_color", material->color);
     Texture* to_send = color_texture ? color_texture : Texture::getWhiteTexture();
@@ -198,8 +227,13 @@ static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::M
     to_send = metallic_texture ? metallic_texture : Texture::getBlackTexture();
     shader->setUniform("u_metallic_texture", to_send, 2);
     
-    to_send = normal_texture ? normal_texture : Texture::getBlueTexture();
-    shader->setUniform("u_normal_texture", to_send, 3);
+    //if para guardar recursos
+    shader->setUniform("u_use_normalmap", normal_texture ? true : false);
+    if (normal_texture){
+        to_send = normal_texture ? normal_texture : Texture::getBlueTexture();
+        shader->setUniform("u_normal_texture", to_send, 3);
+        
+    }
     
     to_send = occlusion_texture ? occlusion_texture : Texture::getWhiteTexture();
     shader->setUniform("u_occlusion_texture", to_send, 4);
@@ -207,14 +241,11 @@ static void uploadCommonData(const GTR::Renderer &object, Camera *camera, GTR::M
     
     //this is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
     shader->setUniform("u_alpha_cutoff", material->alpha_mode == GTR::eAlphaMode::MASK ? material->alpha_cutoff : 0);
-    shader->setUniform("u_ambient_light", object.current_scene->ambient_light);
-    
+    shader->setUniform("u_ambient_light", current_scene->ambient_light);
     //use alpha once during blending
     shader->setUniform("u_use_alpha", true);
-    
     //select the blending
     material->alpha_mode == GTR::eAlphaMode::BLEND ? glEnable(GL_BLEND) : glDisable(GL_BLEND);
-    
     material->alpha_mode == GTR::eAlphaMode::BLEND ?
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) : glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 }
@@ -236,7 +267,7 @@ void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
         if (light->shadow_map){
             shader->setUniform("u_cast_shadows", light->cast_shadows);
             shader->setUniform("u_shadow_bias", light->shadow_bias);
-            shader->setUniform("u_shadow_map", light->shadow_map, 15);
+            shader->setUniform("u_shadowmap", light->shadow_map, 15);
             shader->setUniform("u_light_viewprojection", light->light_camera->viewprojection_matrix);
             
         }
@@ -265,7 +296,7 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
     Vector3 target[MAX_LIGHTS];
     bool cast_shadows[MAX_LIGHTS];
     float shadow_bias[MAX_LIGHTS];
-    Texture shadowmap[MAX_LIGHTS];
+    Texture* shadowmap[MAX_LIGHTS];
     Matrix44 light_viewprojection[MAX_LIGHTS];
     //do the draw call that renders the mesh into the screen
     for (int i = 0; i < num_lights; i++){
@@ -344,7 +375,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
 	shader->enable();
 
 	//upload uniforms
-    uploadCommonData(*this, camera, material, model, shader, color_texture, emissive_texture, metallic_texture, normal_texture, occlusion_texture);
+    
+    //refactor to get rid of redundant attributes
+    uploadCommonData(camera, material, model, shader);
 
     
 

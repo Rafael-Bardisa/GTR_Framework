@@ -35,8 +35,14 @@ namespace GTR {
 	// Separating the render from anything else makes the code cleaner
 	class Renderer
 	{
+        enum ePipeline{
+            FORWARD,
+            DEFERRED
+        };
+        
         
 	public:
+        ePipeline pipeline;
         std::vector<RenderInstruct> instructions;
         std::vector<GTR::LightEntity*> lights;
         int num_lights;
@@ -45,8 +51,9 @@ namespace GTR {
 		//...
         
         Renderer();
-
-        void extracted();
+        
+        void renderForward(Camera *camera);
+        void renderDeferred(Camera* camera);
         
 //renders several elements of the scene
 		void renderScene(GTR::Scene* scene, Camera* camera);
@@ -60,13 +67,7 @@ namespace GTR {
         void renderMultipass(Mesh *mesh, Shader *shader);
         void renderSinglepass(Mesh *mesh, Shader *shader);
         
-        void extracted(Mesh *mesh, bool multipass, Shader *shader);
-        
-        void extracted(Texture *&color_texture, Texture *&emissive_texture, GTR::Material *material, Mesh *mesh, Texture *&metallic_texture, bool &multipass, Texture *&normal_texture, Texture *&occlusion_texture, Shader *&shader);
-        
-        void extracted(GTR::Material *material, Mesh *mesh, bool multipass, Shader *shader);
-        
-        void extracted(Shader *shader);
+        void uploadCommonData(Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader);
         
 //to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera);
@@ -78,7 +79,9 @@ namespace GTR {
                                    instruction.material,
                                    camera);};
         
-        void generateShadowMap(LightEntity* light);
+        Camera *extracted(GTR::LightEntity *light);
+        
+void generateShadowMap(LightEntity* light);
         void showShadowmap(LightEntity* light);
 	};
 

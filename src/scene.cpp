@@ -153,6 +153,8 @@ GTR::PrefabEntity::PrefabEntity()
 	prefab = NULL;
 }
 
+
+
 GTR::LightEntity::LightEntity()
 {
     //default values
@@ -174,6 +176,31 @@ GTR::LightEntity::LightEntity()
     fbo = nullptr;
     shadow_map = nullptr;
     light_camera = nullptr;
+}
+
+// configure the light camera to match light specs
+void GTR::LightEntity::configCamera()
+{
+    light_camera->setPerspective(cone_angle*2, 1.0, 0.1, max_dist);
+    light_camera->lookAt(model * Vector3(), model * Vector3(0,0,-1), model.rotateVector(Vector3(0,1,0)));
+}
+
+bool GTR::LightEntity::boxInFrustum(BoundingBox aabb){
+    switch(type){
+        case UNKNOWN:
+            return false;
+        case POINT:
+            //box against sphere
+            return true;
+        case SPOT:
+            //box against frustum
+            return true;
+        case DIRECTIONAL:
+            //affects every object -> if true, would not filter any light
+            return true;
+        default:
+            return false;
+}
 }
 
 void GTR::PrefabEntity::configure(cJSON* json)

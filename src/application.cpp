@@ -126,17 +126,6 @@ void Application::update(double seconds_elapsed)
 	if (Input::isKeyPressed(SDL_SCANCODE_S) || Input::isKeyPressed(SDL_SCANCODE_DOWN)) camera->move(Vector3(0.0f, 0.0f,-1.0f) * speed);
 	if (Input::isKeyPressed(SDL_SCANCODE_A) || Input::isKeyPressed(SDL_SCANCODE_LEFT)) camera->move(Vector3(1.0f, 0.0f, 0.0f) * speed);
 	if (Input::isKeyPressed(SDL_SCANCODE_D) || Input::isKeyPressed(SDL_SCANCODE_RIGHT)) camera->move(Vector3(-1.0f, 0.0f, 0.0f) * speed);
-    if (Input::isKeyPressed(SDL_SCANCODE_C)){
-        std::cout <<
-        "CAMERA POSITION: " <<
-         camera->eye << "\n" <<
-        "CAMERA CENTER: " <<
-         camera->center << "\n";
-    }
-    // no me va el was key pressed
-    if(Input::isKeyPressed(SDL_SCANCODE_M)){
-        multipass_shader = !multipass_shader;
-    }
 
 	//mouse input to rotate the cam
 	#ifndef SKIP_IMGUI
@@ -299,7 +288,15 @@ void Application::onKeyDown( SDL_KeyboardEvent event )
 	{
 		case SDLK_ESCAPE: must_exit = true; break; //ESC key, kill the app
 		case SDLK_F1: render_debug = !render_debug; break;
+        case SDLK_m: multipass_shader = !multipass_shader; break;
 		case SDLK_f: camera->center.set(0, 0, 0); camera->updateViewMatrix(); break;
+        case SDLK_c:
+            std::cout <<
+            "CAMERA POSITION: " <<
+             camera->eye << "\n" <<
+            "CAMERA CENTER: " <<
+             camera->center << "\n";
+            break;
 		case SDLK_F5: Shader::ReloadAll(); break;
 		case SDLK_F6:
 			scene->clear();

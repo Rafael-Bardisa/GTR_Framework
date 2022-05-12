@@ -81,6 +81,8 @@ namespace GTR {
         Camera* light_camera;
         
         LightEntity();
+        void configCamera();
+        bool boxInFrustum(BoundingBox aabb);
         virtual void renderInMenu();
         virtual void configure(cJSON* json);
     };
