@@ -63,6 +63,9 @@ void Renderer::show_gbuffers(Camera *camera, int w, int h) {
     glViewport(w*0.5, h*0.5, w * 0.5, h * 0.5);
     gbuffers->color_textures[1]->toViewport(); //normalbuffer
     
+    glViewport(w*0.5, 0, w * 0.5, h * 0.5);
+    gbuffers->color_textures[2]->toViewport(); //normalbuffer
+    
     //for the depth remember to linearize when displaying it
     glViewport(0, 0, w * 0.5, h * 0.5);
     Shader* depth_shader = Shader::getDefaultShader("linear_depth");
@@ -122,6 +125,8 @@ void Renderer::renderDeferred(Camera* camera){
     //...
     for (auto instruction : instructions){
         uploadCommonData(camera, instruction.material, instruction.model, shader);
+        
+        instruction.mesh->render(GL_TRIANGLES);
     }
 
     //stop rendering to the gbuffers
@@ -131,11 +136,41 @@ void Renderer::renderDeferred(Camera* camera){
     show_gbuffers(camera, w, h);
 
     //render cada obj con un shader gbuffer
-    
+    /*
+    //start rendering to the illumination fbo
     illumination_fbo->bind();
-    
-    
+
+    //we need a fullscreen quad
+    Mesh* quad = Mesh::getQuad();
+
+    //we need a shader specially for this task, lets call it "deferred"
+    Shader* sh = Shader::Get("deferred");
+    sh->enable();
+
+    //pass the gbuffers to the shader
+    sh->setUniform("u_color_texture", gbuffers_fbo->color_textures[0], 0);
+    sh->setUniform("u_normal_texture", gbuffers_fbo->color_textures[1], 1);
+    sh->setUniform("u_extra_texture", gbuffers_fbo->color_textures[2], 2);
+    sh->setUniform("u_depth_texture", gbuffers_fbo->depth_texture, 3);
+
+    //pass the inverse projection of the camera to reconstruct world pos.
+    sh->setUniform("u_inverse_viewprojection", inv_vp);
+    //pass the inverse window resolution, this may be useful
+    sh->setUniform("u_iRes", Vector2(1.0 / (float)w, 1.0 / (float)h));
+
+    //pass all the information about the light and ambient…
+    //...
+    //disable depth test and blend!!
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+
+    //render a fullscreen quad
+    quad->render(GL_TRIANGLES);
+
     illumination_fbo->unbind();
+     
+     illumination_fbo->color_textures[0]->to_viewport()
+     */
     //renderizar a pantalla leyendo de gbuffer
 }
 

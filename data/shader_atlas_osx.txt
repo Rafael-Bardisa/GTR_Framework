@@ -8,6 +8,38 @@ depth quad.vs depth.fs
 gbuffers basic.vs gbuffers.fs
 deferred quad.vs deferred.fs
 
+\normal
+
+// the code from the slides
+mat3 cotangent_frame(vec3 N, vec3 p, vec2 uv)
+{
+    // get edge vectors of the pixel triangle
+    vec3 dp1 = dFdx( p );
+    vec3 dp2 = dFdy( p );
+    vec2 duv1 = dFdx( uv );
+    vec2 duv2 = dFdy( uv );
+    
+    // solve the linear system
+    vec3 dp2perp = cross( dp2, N );
+    vec3 dp1perp = cross( N, dp1 );
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+ 
+    // construct a scale-invariant frame
+    float invmax = inversesqrt( max( dot(T,T), dot(B,B) ) );
+    return mat3( T * invmax, B * invmax, N );
+}
+
+// assume N, the interpolated vertex normal and
+// WP the world position
+//vec3 normal_pixel = texture2D( normalmap, uv ).xyz;
+vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
+{
+    normal_pixel = normal_pixel * 255./127. - 128./127.;
+    mat3 TBN = cotangent_frame(N, WP, uv);
+    return normalize(TBN * normal_pixel);
+}
+
 \basic.vs
 
 
@@ -76,16 +108,27 @@ uniform sampler2D u_occlusion_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
+uniform bool u_use_normalmap;
+
+#include "normal"
+
 
 void main(){
 
     vec4 color = texture2D(u_color_texture, v_uv);
-    vec3 N = texture2D(u_normal_texture, v_uv).xyz * 0.5 + 0.5;
-    vec4 material_properties = texture2D(u_emissive_texture, v_uv);
+    
+    vec3 N = vec3(0);
+
+    if (u_use_normalmap)
+        N = perturbNormal(v_normal, v_world_position, v_uv, texture2D( u_normal_texture, v_uv ).xyz);
+    else
+        N = normalize( v_normal );
+    
+    vec3 material_properties = texture2D(u_emissive_texture, v_uv).xyz;
 
     gl_FragData[0] = color;
     gl_FragData[1] = vec4(N*0.5+vec3(0.5),1.0);
-    gl_FragData[2] = material_properties;
+    gl_FragData[2] = vec4(material_properties, 1.0);
 
 }
 
