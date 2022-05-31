@@ -31,6 +31,7 @@ Renderer::Renderer(){
     num_lights = 0;
     pipeline = FORWARD;
     gbuffers = nullptr;
+    illumination_fbo = nullptr;
 }
 
 void Renderer::showShadowmap(LightEntity* light) {
@@ -88,7 +89,7 @@ void Renderer::renderDeferred(Camera* camera){
     if (!illumination_fbo){
     illumination_fbo = new FBO();
 #warning TODO aligual como mucho 4 buffers o el maximo de datos para no pillar el render
-    illumination_fbo->create(w, h, 1, GL_RGBA, GL_UNSIGNED_BYTE, true);
+    illumination_fbo->create(w, h, 1, GL_RGB, GL_UNSIGNED_BYTE, true);
     }
     //start rendering inside the gbuffers
     gbuffers->bind();
@@ -115,11 +116,16 @@ void Renderer::renderDeferred(Camera* camera){
     //enable all buffers back
     gbuffers->enableAllBuffers();
 
+    Shader* shader = Shader::Get("gbuffers");
+    shader->enable();
     //render everything
     //...
-    
+    for (auto instruction : instructions){
+        uploadCommonData(camera, instruction.material, instruction.model, shader);
+    }
 
     //stop rendering to the gbuffers
+    shader->disable();
     gbuffers->unbind();
     
     show_gbuffers(camera, w, h);

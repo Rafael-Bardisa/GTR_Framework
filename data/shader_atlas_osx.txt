@@ -59,10 +59,29 @@ void main()
 
 \gbuffers.fs
 
+varying vec3 v_position;
+varying vec3 v_world_position;
+varying vec3 v_normal;
+varying vec2 v_uv;
+varying vec4 v_color;
+
+uniform vec3 u_camera_pos;
+
+uniform vec4 u_color;
+uniform sampler2D u_color_texture;
+uniform sampler2D u_emissive_texture;
+uniform sampler2D u_metallic_texture;
+uniform sampler2D u_normal_texture;
+uniform sampler2D u_occlusion_texture;
+uniform float u_time;
+uniform float u_alpha_cutoff;
+
 
 void main(){
 
-
+    vec4 color = texture2D(u_color_texture, v_uv);
+    vec3 N = texture2D(u_normal_texture, v_uv).xyz * 0.5 + 0.5;
+    vec4 material_properties = texture2D(u_emissive_texture, v_uv);
 
     gl_FragData[0] = color;
     gl_FragData[1] = vec4(N*0.5+vec3(0.5),1.0);
