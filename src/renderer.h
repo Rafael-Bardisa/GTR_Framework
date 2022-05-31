@@ -74,6 +74,8 @@ void renderDeferred(Camera* camera);
         
         void uploadCommonData(Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader);
         
+        void uploadLightData(LightEntity* light, Shader* shader);
+        
 //to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera);
         //to render one mesh with render instruction

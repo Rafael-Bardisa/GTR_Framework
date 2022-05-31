@@ -126,6 +126,8 @@ void Renderer::renderDeferred(Camera* camera){
     for (auto instruction : instructions){
         uploadCommonData(camera, instruction.material, instruction.model, shader);
         
+        shader->setUniform("u_dither", instruction.material->alpha_mode == eAlphaMode::BLEND);
+        
         instruction.mesh->render(GL_TRIANGLES);
     }
 
@@ -144,19 +146,19 @@ void Renderer::renderDeferred(Camera* camera){
     Mesh* quad = Mesh::getQuad();
 
     //we need a shader specially for this task, lets call it "deferred"
-    Shader* sh = Shader::Get("deferred");
-    sh->enable();
+    shader = Shader::Get("deferred");
+    shader->enable();
 
     //pass the gbuffers to the shader
-    sh->setUniform("u_color_texture", gbuffers_fbo->color_textures[0], 0);
-    sh->setUniform("u_normal_texture", gbuffers_fbo->color_textures[1], 1);
-    sh->setUniform("u_extra_texture", gbuffers_fbo->color_textures[2], 2);
-    sh->setUniform("u_depth_texture", gbuffers_fbo->depth_texture, 3);
+    shader->setUniform("u_color_texture", gbuffers_fbo->color_textures[0], 0);
+    shader->setUniform("u_normal_texture", gbuffers_fbo->color_textures[1], 1);
+    shader->setUniform("u_extra_texture", gbuffers_fbo->color_textures[2], 2);
+    shader->setUniform("u_depth_texture", gbuffers_fbo->depth_texture, 3);
 
     //pass the inverse projection of the camera to reconstruct world pos.
-    sh->setUniform("u_inverse_viewprojection", inv_vp);
+    shader->setUniform("u_inverse_viewprojection", inv_vp);
     //pass the inverse window resolution, this may be useful
-    sh->setUniform("u_iRes", Vector2(1.0 / (float)w, 1.0 / (float)h));
+    shader->setUniform("u_iRes", Vector2(1.0 / (float)w, 1.0 / (float)h));
 
     //pass all the information about the light and ambient…
     //...
@@ -369,33 +371,33 @@ void Renderer::uploadCommonData(Camera *camera, GTR::Material *material, const M
     shader->setUniform("u_ambient_light", current_scene->ambient_light);
     //use alpha once during blending
     shader->setUniform("u_use_alpha", true);
-    //select the blending
-    material->alpha_mode == GTR::eAlphaMode::BLEND ? glEnable(GL_BLEND) : glDisable(GL_BLEND);
-    material->alpha_mode == GTR::eAlphaMode::BLEND ?
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) : glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 }
+
+void Renderer::uploadLightData(LightEntity* light, Shader* shader){
+    shader->setUniform("u_light_type", (int)light->type);
+    
+    shader->setUniform("u_light_color", light->color * light->intensity);
+    shader->setUniform("u_light_position", light->model.getTranslation());
+    shader->setUniform("u_max_distance", light->max_dist);
+    float light_angle_cosine = cos(light->cone_angle * DEG2RAD);
+    shader->setUniform("u_cone_angle_cos", light_angle_cosine);
+    shader->setUniform("u_cone_exp", light->cone_exp);
+    shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, -1)).normalize());
+    
+    shader->setUniform("u_target", light->target);
+    if (light->shadow_map){
+        shader->setUniform("u_cast_shadows", light->cast_shadows);
+        shader->setUniform("u_shadow_bias", light->shadow_bias);
+        shader->setUniform("u_shadowmap", light->shadow_map, 15);
+        shader->setUniform("u_light_viewprojection", light->light_camera->viewprojection_matrix);
+        
+    }
+}
+
 
 void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
     for(auto light : lights){
-        
-        shader->setUniform("u_light_type", (int)light->type);
-        
-        shader->setUniform("u_light_color", light->color * light->intensity);
-        shader->setUniform("u_light_position", light->model.getTranslation());
-        shader->setUniform("u_max_distance", light->max_dist);
-        float light_angle_cosine = cos(light->cone_angle * DEG2RAD);
-        shader->setUniform("u_cone_angle_cos", light_angle_cosine);
-        shader->setUniform("u_cone_exp", light->cone_exp);
-        shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, -1)).normalize());
-        
-        shader->setUniform("u_target", light->target);
-        if (light->shadow_map){
-            shader->setUniform("u_cast_shadows", light->cast_shadows);
-            shader->setUniform("u_shadow_bias", light->shadow_bias);
-            shader->setUniform("u_shadowmap", light->shadow_map, 15);
-            shader->setUniform("u_light_viewprojection", light->light_camera->viewprojection_matrix);
-            
-        }
+        uploadLightData(light, shader);
         //do the draw call that renders the mesh into the screen
         mesh->render(GL_TRIANGLES);
         
@@ -469,17 +471,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
 
 	//define locals to simplify coding
 	Shader* shader = NULL;
-	Texture* color_texture = NULL;
-    Texture* emissive_texture = NULL;
-    Texture* metallic_texture = NULL;
-    Texture* normal_texture = NULL;
-    Texture* occlusion_texture = NULL;
-
-	color_texture = material->color_texture.texture;
-	emissive_texture = material->emissive_texture.texture;
-    metallic_texture = material->metallic_roughness_texture.texture;
-	normal_texture = material->normal_texture.texture;
-	occlusion_texture = material->occlusion_texture.texture;
 
 	//select if render both sides of the triangles
 	if(material->two_sided)
@@ -504,6 +495,10 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     //refactor to get rid of redundant attributes
     uploadCommonData(camera, material, model, shader);
 
+    //select the blending
+    material->alpha_mode == GTR::eAlphaMode::BLEND ? glEnable(GL_BLEND) : glDisable(GL_BLEND);
+    material->alpha_mode == GTR::eAlphaMode::BLEND ?
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) : glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     
 
     
