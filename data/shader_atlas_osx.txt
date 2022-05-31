@@ -169,9 +169,133 @@ void main(){
 
 \deferred.fs
 
+uniform sampler2D u_color_texture;
+uniform sampler2D u_normal_texture;
+uniform sampler2D u_extra_texture;
+uniform sampler2D u_depth_texture;
 
-void main(){
+uniform mat4 u_inverse_viewprojection;
+uniform vec2 u_iRes;
 
+//pass here all the uniforms required for illumination...
+uniform int u_light_type;
+
+uniform vec3 u_ambient_light;
+
+uniform vec3 u_light_position;
+uniform vec3 u_light_color;
+uniform vec3 u_light_direction;
+
+
+uniform float u_max_distance;
+
+uniform float u_cone_angle_cos;
+uniform float u_cone_exp;
+
+uniform bool u_use_alpha;
+uniform bool u_use_normalmap;
+
+uniform bool u_cast_shadows;
+uniform sampler2D u_shadowmap;
+uniform mat4 u_light_viewprojection;
+uniform float u_shadow_bias;
+
+float test_shadowmap(vec3 wp){
+    //project our 3D position to the shadowmap
+    vec4 proj_pos = u_light_viewprojection * vec4(wp,1.0);
+
+    //from homogeneus space to clip space
+    vec2 shadow_uv = proj_pos.xy / proj_pos.w;
+
+    //from clip space to uv space
+    shadow_uv = shadow_uv * 0.5 + vec2(0.5);
+
+    //get point depth [-1 .. +1] in non-linear space
+    float real_depth = (proj_pos.z - u_shadow_bias) / proj_pos.w;
+
+    //normalize from [-1..+1] to [0..+1] still non-linear
+    real_depth = real_depth * 0.5 + 0.5;
+
+    //read depth from depth buffer in [0..+1] non-linear
+    float shadow_depth = texture2D( u_shadowmap, shadow_uv).x;
+
+    //compute final shadow factor by comparing
+    float shadow_factor = 1.0;
+
+    //we can compare them, even if they are not linear
+    if( shadow_depth < real_depth )
+    shadow_factor = 0.0;
+    return shadow_factor;
+}
+
+float spot_factor(vec3 light_direction, vec3 L, float cos_limit, float cone_exp){
+    float light_dot = -dot(light_direction, L);
+    if (light_dot < cos_limit){
+        return 0.0;
+        }
+    else{
+        light_dot = (light_dot - cos_limit)/(1.0-cos_limit);
+        return pow(light_dot, cone_exp);
+    }
+}
+
+void main()
+{
+//extract uvs from pixel screenpos
+    vec2 uv = gl_FragCoord.xy * u_iRes.xy;
+    
+    vec3 color = texture2D( u_color_texture, uv ).xyz;
+    
+    //normals must be converted from 0..1 to -1..+1
+    vec3 N = texture2D( u_normal_texture, uv ).xyz * 2.0 - 1.0;
+    N = normalize(N); //always normalize in case of data loss
+    
+    //reconstruct world position from depth and inv. viewproj
+    float depth = texture2D( u_depth_texture, uv ).x;
+    vec4 screen_pos = vec4(uv.x*2.0-1.0, uv.y*2.0-1.0, depth*2.0-1.0, 1.0);
+    vec4 proj_worldpos = u_inverse_viewprojection * screen_pos;
+    vec3 world_position = proj_worldpos.xyz / proj_worldpos.w;
+    //now do your illumination using worldpos and the normal...
+    vec3 light = u_ambient_light;
+    
+    float att_factor = 1.0;
+    //hol up
+    vec3 L = u_light_direction;
+    
+    if (u_light_type != 3){
+    //compute att factor and L if light is not directional
+        L = u_light_position - world_position;
+        float light_distance = length(L);
+        L /= light_distance;
+        
+        att_factor =  u_max_distance - light_distance;
+        att_factor = max(att_factor / u_max_distance, 0.0);
+        att_factor = pow(att_factor, 2.0);
+    }else{
+    L = normalize(L);
+    }
+
+
+
+    float NdotL = clamp(dot(N, L), 0.0, 1.0);
+    float spot_factor = 1.0;
+    
+    float shadow_factor = 1.0;
+    if (u_light_type == 2){
+    //spot factor if light is spot
+    spot_factor = spot_factor(u_light_direction, L, u_cone_angle_cos, u_cone_exp);
+    if(u_cast_shadows){
+        shadow_factor = test_shadowmap(world_position);
+        }
+    }
+
+
+
+    //store the amount of diffuse light
+    light += u_light_color * NdotL * att_factor * spot_factor * shadow_factor;
+    
+    gl_FragData[0] = vec4(color, 1.0);
+    
 }
 
 \texture.fs
