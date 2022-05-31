@@ -138,7 +138,7 @@ void Renderer::renderDeferred(Camera* camera){
     show_gbuffers(camera, w, h);
 
     //render cada obj con un shader gbuffer
-    /*
+    
     //start rendering to the illumination fbo
     illumination_fbo->bind();
 
@@ -150,12 +150,15 @@ void Renderer::renderDeferred(Camera* camera){
     shader->enable();
 
     //pass the gbuffers to the shader
-    shader->setUniform("u_color_texture", gbuffers_fbo->color_textures[0], 0);
-    shader->setUniform("u_normal_texture", gbuffers_fbo->color_textures[1], 1);
-    shader->setUniform("u_extra_texture", gbuffers_fbo->color_textures[2], 2);
-    shader->setUniform("u_depth_texture", gbuffers_fbo->depth_texture, 3);
+    shader->setUniform("u_color_texture", gbuffers->color_textures[0], 0);
+    shader->setUniform("u_normal_texture", gbuffers->color_textures[1], 1);
+    shader->setUniform("u_extra_texture", gbuffers->color_textures[2], 2);
+    shader->setUniform("u_depth_texture", gbuffers->depth_texture, 3);
 
     //pass the inverse projection of the camera to reconstruct world pos.
+    Matrix44 inv_vp = camera->viewprojection_matrix;
+    inv_vp.inverse();
+    
     shader->setUniform("u_inverse_viewprojection", inv_vp);
     //pass the inverse window resolution, this may be useful
     shader->setUniform("u_iRes", Vector2(1.0 / (float)w, 1.0 / (float)h));
@@ -171,8 +174,8 @@ void Renderer::renderDeferred(Camera* camera){
 
     illumination_fbo->unbind();
      
-     illumination_fbo->color_textures[0]->to_viewport()
-     */
+    illumination_fbo->color_textures[0]->toViewport();
+     
     //renderizar a pantalla leyendo de gbuffer
 }
 
