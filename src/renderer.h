@@ -42,6 +42,7 @@ namespace GTR {
         };
         
         FBO* gbuffers;
+        FBO* illumination_fbo;
         ePipeline pipeline;
         std::vector<RenderInstruct> instructions;
         std::vector<GTR::LightEntity*> lights;

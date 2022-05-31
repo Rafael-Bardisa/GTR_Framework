@@ -84,6 +84,12 @@ void Renderer::renderDeferred(Camera* camera){
 #warning TODO aligual como mucho 4 buffers o el maximo de datos para no pillar el render
     gbuffers->create(w, h, 3, GL_RGBA, GL_UNSIGNED_BYTE, true);
     }
+    
+    if (!illumination_fbo){
+    illumination_fbo = new FBO();
+#warning TODO aligual como mucho 4 buffers o el maximo de datos para no pillar el render
+    illumination_fbo->create(w, h, 1, GL_RGBA, GL_UNSIGNED_BYTE, true);
+    }
     //start rendering inside the gbuffers
     gbuffers->bind();
 
@@ -100,12 +106,18 @@ void Renderer::renderDeferred(Camera* camera){
     gbuffers->enableSingleBuffer(1);
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
+    
+    gbuffers->enableSingleBuffer(2);
+    glClearColor(0.0, 0.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
 
     //enable all buffers back
     gbuffers->enableAllBuffers();
 
     //render everything
     //...
+    
 
     //stop rendering to the gbuffers
     gbuffers->unbind();
@@ -114,6 +126,10 @@ void Renderer::renderDeferred(Camera* camera){
 
     //render cada obj con un shader gbuffer
     
+    illumination_fbo->bind();
+    
+    
+    illumination_fbo->unbind();
     //renderizar a pantalla leyendo de gbuffer
 }
 

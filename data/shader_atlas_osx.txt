@@ -5,6 +5,9 @@ multiphong basic.vs multiphong.fs
 singlephong basic.vs singlephong.fs
 depth quad.vs depth.fs
 
+gbuffers basic.vs gbuffers.fs
+deferred quad.vs deferred.fs
+
 \basic.vs
 
 
@@ -54,6 +57,25 @@ void main()
 	gl_FragColor = u_color;
 }
 
+\gbuffers.fs
+
+
+void main(){
+
+
+
+    gl_FragData[0] = color;
+    gl_FragData[1] = vec4(N*0.5+vec3(0.5),1.0);
+    gl_FragData[2] = material_properties;
+
+}
+
+\deferred.fs
+
+
+void main(){
+
+}
 
 \texture.fs
 
