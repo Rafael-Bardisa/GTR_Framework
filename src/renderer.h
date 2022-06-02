@@ -40,32 +40,47 @@ namespace GTR {
             FORWARD,
             DEFERRED
         };
+        enum eShaderPass{
+            SINGLEPASS,
+            MULTIPASS
+        };
         
         FBO* gbuffers;
         FBO* illumination_fbo;
+        
         ePipeline pipeline;
+        eShaderPass shaderpass;
+        
         std::vector<RenderInstruct> instructions;
         std::vector<GTR::LightEntity*> lights;
+        
         int num_lights;
         Scene* current_scene;
+        
+        Texture* shadow_atlas;
+        FBO* shadow_fbo;
 		//add here your functions
 		//...
         
         Renderer();
         
+        void loadScene(Camera *camera, GTR::Scene *&scene);
+        
         void renderForward(Camera *camera);
         void show_gbuffers(Camera *camera, int h, int w);
         
-void renderDeferred(Camera* camera);
+        void renderDeferred(Camera* camera);
+        
+        void extracted(Camera *camera, GTR::Scene *&scene);
         
 //renders several elements of the scene
 		void renderScene(GTR::Scene* scene, Camera* camera);
 	
 		//to render a whole prefab (with all its nodes)
-		void renderPrefab(const Matrix44& model, GTR::Prefab* prefab, Camera* camera);
+		void queuePrefab(const Matrix44& model, GTR::Prefab* prefab, Camera* camera);
 
 		//to render one node from the prefab and its children
-		void renderNode(const Matrix44& model, GTR::Node* node, Camera* camera);
+		void queueNode(const Matrix44& model, GTR::Node* node, Camera* camera);
 
         void renderMultipass(Mesh *mesh, Shader *shader);
 
@@ -88,9 +103,11 @@ void renderDeferred(Camera* camera);
         
         Camera *extracted(GTR::LightEntity *light);
         
-void generateShadowMap(LightEntity* light);
+        void generateShadowAtlas();
+        void generateShadowMap(LightEntity* light);
+        
         void showShadowmap(LightEntity* light);
-	};
+        };
 
 	Texture* CubemapFromHDRE(const char* filename);
     

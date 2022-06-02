@@ -77,8 +77,9 @@ namespace GTR {
         float shadow_bias;
         
         FBO* fbo;
-        Texture* shadow_map;
         Camera* light_camera;
+        
+        Vector4 atlas_shadowmap_dimensions;
         
         LightEntity();
         void configCamera();

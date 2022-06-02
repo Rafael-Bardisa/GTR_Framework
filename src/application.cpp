@@ -36,7 +36,6 @@ Application::Application(int window_width, int window_height, SDL_Window* window
 	must_exit = false;
 	render_debug = true;
 	render_gui = true;
-    multipass_shader = true;
 	render_wireframe = false;
 
 	fps = 0;
@@ -120,10 +119,10 @@ void Application::update(double seconds_elapsed)
 	float speed = seconds_elapsed * cam_speed; //the speed is defined by the seconds_elapsed so it goes constant
 	float orbit_speed = seconds_elapsed * 0.5;
     //biggest mistake ever
-    if (!multipass_shader){
-        scene->entities[2]->model.rotateGlobal(speed, Vector3(0, 1, 0));
-        scene->entities[2]->model.rotate(speed, Vector3(0, 1, 0));
-    }
+    //if (!renderer->shaderpass == GTR::Renderer::MULTIPASS){
+        //scene->entities[2]->model.rotateGlobal(speed, Vector3(0, 1, 0));
+        //scene->entities[2]->model.rotate(speed, Vector3(0, 1, 0));
+    //}
 	//async input to move the camera around
 	if (Input::isKeyPressed(SDL_SCANCODE_LSHIFT)) speed *= 10; //move faster with left shift
 	if (Input::isKeyPressed(SDL_SCANCODE_W) || Input::isKeyPressed(SDL_SCANCODE_UP)) camera->move(Vector3(0.0f, 0.0f, 1.0f) * speed);
@@ -292,7 +291,10 @@ void Application::onKeyDown( SDL_KeyboardEvent event )
 	{
 		case SDLK_ESCAPE: must_exit = true; break; //ESC key, kill the app
 		case SDLK_F1: render_debug = !render_debug; break;
-        case SDLK_m: multipass_shader = !multipass_shader; break;
+        case SDLK_m: renderer->shaderpass =
+            renderer->shaderpass == GTR::Renderer::MULTIPASS? GTR::Renderer::SINGLEPASS : GTR::Renderer::MULTIPASS;
+            std::cout << (renderer->shaderpass == GTR::Renderer::MULTIPASS);
+            break;
         case SDLK_p: renderer->pipeline = renderer->pipeline == GTR::Renderer::DEFERRED? GTR::Renderer::FORWARD : GTR::Renderer::DEFERRED;
             break;
 		case SDLK_f: camera->center.set(0, 0, 0); camera->updateViewMatrix(); break;

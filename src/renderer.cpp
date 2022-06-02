@@ -32,13 +32,14 @@ Renderer::Renderer(){
     pipeline = FORWARD;
     gbuffers = nullptr;
     illumination_fbo = nullptr;
+    
 }
 
 void Renderer::showShadowmap(LightEntity* light) {
     Shader* shader = Shader::getDefaultShader("depth");
     shader->enable();
     shader->setUniform("u_camera_nearfar", Vector2(light->light_camera->near_plane, light->light_camera->far_plane));
-    light->shadow_map->toViewport(shader);
+//    shadow_atlas->toViewport(shader);
 }
 
 void Renderer::renderForward(Camera *camera) {
@@ -179,30 +180,23 @@ void Renderer::renderDeferred(Camera* camera){
     //renderizar a pantalla leyendo de gbuffer
 }
 
-// upgraded this mofo
-// ordered, something weird with colors before loading textures
-void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
-{
-    current_scene = scene;
-	//set the clear color (the background color)
-	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
-    
-    //empty instructions and lights list
+//loads the entities from the scene and stores them conveniently in the class. Uses camera to avoid rendering out of bounds entities
+void Renderer::loadScene(Camera *camera, GTR::Scene *&scene) {
     instructions.clear();
     lights.clear();
-
-	// Clear the color and the depth buffer
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	checkGLErrors();
-
-
-	for (int i = 0; i < scene->entities.size(); ++i)
-    #warning TODO get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized scene
-	{
-		BaseEntity* ent = scene->entities[i];
-		if (!ent->visible)
-			continue;
-
+    
+    // Clear the color and the depth buffer
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    checkGLErrors();
+    
+    
+    for (int i = 0; i < scene->entities.size(); ++i)
+#warning TODO get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized scene
+    {
+        BaseEntity* ent = scene->entities[i];
+        if (!ent->visible)
+            continue;
+        
         if (ent->entity_type == LIGHT){
             auto light_ent = (GTR::LightEntity*)ent;
             //break out of switch if light outside frustrum, else continue to next entity
@@ -210,7 +204,6 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
                 case UNKNOWN:
                     continue;
                 case POINT:
-                    //easy check
                     if (camera->testSphereInFrustum(light_ent->model * Vector3(), light_ent->max_dist))
                         break;
                     continue;
@@ -221,35 +214,44 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
                     break;
                 default:
                     continue;
-                }
+            }
             lights.push_back(light_ent);
         }
-	}
+    }
     num_lights = (int)lights.size();
     
     for (int i = 0; i < scene->entities.size(); ++i)
-    #warning TODO get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized scene
+#warning TODO get lights-> test lights against camera-> get prefabs-> test prefabs against all cameras-> optimized scene
     {
         BaseEntity* ent = scene->entities[i];
         if (!ent->visible)
             continue;
-
+        
         //is a prefab!
         if (ent->entity_type == PREFAB)
         {
             PrefabEntity* pent = (GTR::PrefabEntity*)ent;
             if(pent->prefab)
 #warning TODO renderPrefab should check if prefab receives light from any source or if inside camera frustum
-                renderPrefab(ent->model, pent->prefab, camera);
+                queuePrefab(ent->model, pent->prefab, camera);
         }
     }
     
 #warning TODO atlas mejor
-    for (auto light : lights){
-            generateShadowMap(light);
-    }
+    generateShadowAtlas();
+    
     // sort node vector by priority
     std::sort(instructions.begin(), instructions.end(), GTR::renderPriority);
+}
+
+void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
+{
+    current_scene = scene;
+	//set the clear color (the background color)
+	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
+    
+    //empty instructions and lights list
+    loadScene(camera, scene);
 
     // render nodes by priority
     
@@ -261,12 +263,34 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
     //showShadowmap(lights[0]);
 }
 
+// compare distance to current camera
+bool light_distance(const LightEntity* first, const LightEntity* second){
+    float first_distance = first->type == DIRECTIONAL ? 0.0 : (first->model * Vector3()).distance(Camera::current->eye);
+    float second_distance = second->type == DIRECTIONAL ? 0.0 : (second->model * Vector3()).distance(Camera::current->eye);
+    
+    return first_distance < second_distance;
+}
+
+
+// for each light, assign a slot in shadow atlas. Directional and closer get more resolution
+void Renderer::generateShadowAtlas(){
+    std::sort(lights.begin(), lights.end(), light_distance);
+    for (auto* light:lights){
+        //assign slot coordinates to light
+        
+        
+        //generate shadowmap of light
+        
+    }
+}
+
+//
 void Renderer::generateShadowMap(LightEntity* light){
     if (!light->cast_shadows) {
         if (light->fbo){
             delete light->fbo;
             light->fbo = nullptr;
-            light->shadow_map = nullptr;
+            //light->shadow_map = nullptr;
         }
         return;
     }
@@ -274,7 +298,8 @@ void Renderer::generateShadowMap(LightEntity* light){
     if (!light->fbo){
         light->fbo = new FBO();
         light->fbo->setDepthOnly(1024, 1024);
-        light->shadow_map = light->fbo->depth_texture;
+        //light->shadow_map = light->fbo->depth_texture;
+#warning TODO esto activa la camara de la luz
         if(!light->light_camera) light->light_camera = new Camera();
     }
     light->fbo->bind();
@@ -286,8 +311,10 @@ void Renderer::generateShadowMap(LightEntity* light){
     
     glClear(GL_DEPTH_BUFFER_BIT);
     for (auto instruction : instructions){
+        //skip transparent entities
         if (instruction.material->alpha_mode == eAlphaMode::BLEND) continue;
-            renderFlatMesh(instruction.model, instruction.mesh, instruction.material, light_camera);
+        
+        renderFlatMesh(instruction.model, instruction.mesh, instruction.material, light_camera);
         
     }
     
@@ -296,15 +323,15 @@ void Renderer::generateShadowMap(LightEntity* light){
 }
 
 //adds nodes of prefab to renderer node list
-void Renderer::renderPrefab(const Matrix44& model, GTR::Prefab* prefab, Camera* camera)
+void Renderer::queuePrefab(const Matrix44& model, GTR::Prefab* prefab, Camera* camera)
 {
 	assert(prefab && "PREFAB IS NULL");
 	//assign the model to the root node
-	renderNode(model, &prefab->root, camera);
+	queueNode(model, &prefab->root, camera);
 }
 
 //adds a node, if visible, to the node vector and recursively calls on its children
-void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera* camera)
+void Renderer::queueNode(const Matrix44& prefab_model, GTR::Node* node, Camera* camera)
 {
 	if (!node->visible)
 		return;
@@ -331,7 +358,7 @@ void Renderer::renderNode(const Matrix44& prefab_model, GTR::Node* node, Camera*
 
 	//iterate recursively with children
 	for (int i = 0; i < node->children.size(); ++i)
-		renderNode(prefab_model, node->children[i], camera);
+		queueNode(prefab_model, node->children[i], camera);
 }
 
 void Renderer::uploadCommonData(Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader) {
@@ -388,10 +415,13 @@ void Renderer::uploadLightData(LightEntity* light, Shader* shader){
     shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, -1)).normalize());
     
     shader->setUniform("u_target", light->target);
-    if (light->shadow_map){
-        shader->setUniform("u_cast_shadows", light->cast_shadows);
+    
+#warning TODO reactivar sombras
+    bool use_shadowmap = /*light->cast_shadows*/ false;
+    if (use_shadowmap){
+        shader->setUniform("u_cast_shadows", use_shadowmap );
         shader->setUniform("u_shadow_bias", light->shadow_bias);
-        shader->setUniform("u_shadowmap", light->shadow_map, 15);
+        shader->setUniform("u_shadowmap_dimensions", light->atlas_shadowmap_dimensions);
         shader->setUniform("u_light_viewprojection", light->light_camera->viewprojection_matrix);
         
     }
@@ -399,6 +429,9 @@ void Renderer::uploadLightData(LightEntity* light, Shader* shader){
 
 
 void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
+    
+    //tell shader it is the first pass so it should use the alpha
+    shader->setUniform("u_first_pass", true);
     for(auto light : lights){
         uploadLightData(light, shader);
         //do the draw call that renders the mesh into the screen
@@ -409,7 +442,7 @@ void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
         
         shader->setUniform("u_ambient_light", Vector3());
         //tell shader to not add alpha
-        shader->setUniform("u_use_alpha", false);
+        shader->setUniform("u_first_pass", false);
         //std::cout << i;
     }
 }
@@ -426,8 +459,12 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
     Vector3 target[MAX_LIGHTS];
     bool cast_shadows[MAX_LIGHTS];
     float shadow_bias[MAX_LIGHTS];
-    Texture* shadowmap[MAX_LIGHTS];
+    //Texture* shadowmap[MAX_LIGHTS];
     Matrix44 light_viewprojection[MAX_LIGHTS];
+    
+    //default to fill array
+    Matrix44 default_viewprojection;
+    default_viewprojection.setIdentity();
     //do the draw call that renders the mesh into the screen
     for (int i = 0; i < num_lights; i++){
         LightEntity* light = lights[i];
@@ -440,10 +477,14 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
         cone_exp[i] = light->cone_exp;
         light_direction[i] = light->model.rotateVector(Vector3(0, 0, -1)).normalize();
         target[i] = light->target;
-        cast_shadows[i] = light->cast_shadows;
-        shadow_bias[i] = light->shadow_bias;
+        
+#warning TODO activar sombras
+        bool use_shadows = /*light->cast_shadows*/ false;
+        
+        cast_shadows[i] = use_shadows;
+        shadow_bias[i] = use_shadows ? light->shadow_bias : 0.f;
         //shadowmap[i] = *light->shadow_map;
-        //light_viewprojection[i] = light->light_camera->viewprojection_matrix;
+        light_viewprojection[i] = use_shadows ? light->light_camera->viewprojection_matrix : default_viewprojection;
     }
     shader->setUniform("u_num_lights", num_lights);
     shader->setUniform3Array("u_light_position", (float*)&positions, MAX_LIGHTS);
@@ -483,8 +524,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     assert(glGetError() == GL_NO_ERROR);
 
 	//chose a shader
-    bool multipass = Application::instance->multipass_shader;
-	shader = multipass ? Shader::Get("multiphong") : Shader::Get("singlephong");
+    bool multipass = shaderpass == MULTIPASS;
+    
+    shader = multipass ? Shader::Get("multiphong") : Shader::Get("singlephong");
 
     assert(glGetError() == GL_NO_ERROR);
 
@@ -506,6 +548,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
 
     
     if (multipass){
+        
         glDepthFunc(GL_LEQUAL);
         renderMultipass(mesh, shader);
     }

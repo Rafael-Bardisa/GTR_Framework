@@ -174,8 +174,9 @@ GTR::LightEntity::LightEntity()
     shadow_bias = 0;
     
     fbo = nullptr;
-    shadow_map = nullptr;
     light_camera = nullptr;
+    
+    atlas_shadowmap_dimensions = Vector4();
 }
 
 // configure the light camera to match light specs

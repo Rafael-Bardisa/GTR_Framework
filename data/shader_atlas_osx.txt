@@ -325,7 +325,6 @@ void main()
 
 \multiphong.fs
 
-//multipass phong
 
 varying vec3 v_position;
 varying vec3 v_world_position;
@@ -359,13 +358,20 @@ uniform float u_max_distance;
 uniform float u_cone_angle_cos;
 uniform float u_cone_exp;
 
-uniform bool u_use_alpha;
+//whether to use alpha and emissive or not. If used every iteration illumination is incorrect
+uniform bool u_first_pass;
 uniform bool u_use_normalmap;
 
 uniform bool u_cast_shadows;
-uniform sampler2D u_shadowmap;
+uniform sampler2D u_shadow_atlas;
+
+uniform vec4 u_light_shadow_slot;
 uniform mat4 u_light_viewprojection;
 uniform float u_shadow_bias;
+
+vec2 reproject_uv(vec2 uv, vec4 dimensions){
+    return vec2(dimensions.x + (uv.x * dimensions.z), dimensions.y + (uv.y * dimensions.a));
+}
 
 float test_shadowmap(vec3 wp){
     //project our 3D position to the shadowmap
@@ -377,6 +383,9 @@ float test_shadowmap(vec3 wp){
     //from clip space to uv space
     shadow_uv = shadow_uv * 0.5 + vec2(0.5);
 
+    //reproject because atlas
+    shadow_uv = reproject_uv(shadow_uv, u_light_shadow_slot);
+
     //get point depth [-1 .. +1] in non-linear space
     float real_depth = (proj_pos.z - u_shadow_bias) / proj_pos.w;
 
@@ -384,7 +393,7 @@ float test_shadowmap(vec3 wp){
     real_depth = real_depth * 0.5 + 0.5;
 
     //read depth from depth buffer in [0..+1] non-linear
-    float shadow_depth = texture2D( u_shadowmap, shadow_uv).x;
+    float shadow_depth = texture2D( u_shadow_atlas, shadow_uv).x;
 
     //compute final shadow factor by comparing
     float shadow_factor = 1.0;
@@ -462,11 +471,17 @@ void main()
     
     float att_factor = 1.0;
     //hol up
+
+
+
+
+
     vec3 L = u_light_direction;
-    
-    if (u_light_type != 3){
     //compute att factor and L if light is not directional
+
+    if (u_light_type != 3){
         L = u_light_position - v_world_position;
+
         float light_distance = length(L);
         L /= light_distance;
         
@@ -474,7 +489,7 @@ void main()
         att_factor = max(att_factor / u_max_distance, 0.0);
         att_factor = pow(att_factor, 2.0);
     }else{
-    L = normalize(L);
+        L = normalize(L);
     }
 
 
@@ -483,24 +498,22 @@ void main()
     float spot_factor = 1.0;
     
     float shadow_factor = 1.0;
-    if (u_light_type == 2){
+    if (u_light_type == 2)
     //spot factor if light is spot
-    spot_factor = spot_factor(u_light_direction, L, u_cone_angle_cos, u_cone_exp);
-    if(u_cast_shadows){
+        spot_factor = spot_factor(u_light_direction, L, u_cone_angle_cos, u_cone_exp);
+
+    if(u_cast_shadows)
         shadow_factor = test_shadowmap(v_world_position);
     
-        }
-    }
-
-
-
+        
     //store the amount of diffuse light
     light += u_light_color * NdotL * att_factor * spot_factor * shadow_factor;
 
     // if it is the first pass we use the color alpha. If not we set it to 0 to avoid adding anything that should be only added once
-    float alpha = u_use_alpha ? color.a : 0.0;
-    //only add alpha once, else more opaque than it should be
-    gl_FragColor = vec4(color.xyz * light, alpha) + vec4(texture2D (u_emissive_texture, uv).xyz, 0);
+    float alpha = u_first_pass ? color.a : 0.0;
+
+    vec3 emissive_value = u_first_pass ? texture2D (u_emissive_texture, uv).xyz : vec3(0.0);
+    gl_FragColor = vec4(color.xyz * light + emissive_value, alpha);
 }
 
 \singlephong.fs
@@ -542,10 +555,17 @@ uniform int u_num_lights;
 uniform bool u_use_normalmap;
 
 uniform bool u_cast_shadows[MAX_LIGHTS];
-uniform sampler2D u_shadowmap[MAX_LIGHTS];
+uniform sampler2D u_shadow_atlas;
+//THIS NEEDS TO BE NORMALIZED 0-1
+uniform vec4 u_light_shadow_slot[MAX_LIGHTS];
 uniform mat4 u_light_viewprojection[MAX_LIGHTS];
 uniform float u_shadow_bias[MAX_LIGHTS];
 
+vec2 reproject_uv(vec2 uv, vec4 dimensions){
+    return vec2(dimensions.x + (uv.x * dimensions.z), dimensions.y + (uv.y * dimensions.a));
+}
+
+// needs vec4 light_shadow_info
 float test_shadowmap(vec3 wp, int i){
     //project our 3D position to the shadowmap
     vec4 proj_pos = u_light_viewprojection[i] * vec4(wp,1.0);
@@ -556,6 +576,9 @@ float test_shadowmap(vec3 wp, int i){
     //from clip space to uv space
     shadow_uv = shadow_uv * 0.5 + vec2(0.5);
 
+    //reproject because atlas
+    shadow_uv = reproject_uv(shadow_uv, u_light_shadow_slot[i]);
+
     //get point depth [-1 .. +1] in non-linear space
     float real_depth = (proj_pos.z - u_shadow_bias[i]) / proj_pos.w;
 
@@ -563,7 +586,7 @@ float test_shadowmap(vec3 wp, int i){
     real_depth = real_depth * 0.5 + 0.5;
 
     //read depth from depth buffer in [0..+1] non-linear
-    float shadow_depth = texture2D( u_shadowmap[i], shadow_uv).x;
+    float shadow_depth = texture2D( u_shadow_atlas, shadow_uv).x;
 
     //compute final shadow factor by comparing
     float shadow_factor = 1.0;
@@ -640,9 +663,10 @@ void main()
         {
         // hol up
             vec3 L = u_light_direction[i];
-            
+
             if(u_light_type[i] != 3){
                 L = u_light_position[i] - v_world_position;
+
                 float light_distance = length(L);
                 L /= light_distance;
             
@@ -656,18 +680,22 @@ void main()
             float NdotL = clamp(dot(N, L), 0.0, 1.0);
             float spot_factor = 1.0;
             
-            if (u_light_type[i] == 2){
+            float shadow_factor = 1.0;
+            if (u_light_type[i] == 2)
                 //spot factor if light is spot
                 spot_factor = spot_factor(u_light_direction[i], L, u_cone_angle_cos[i], u_cone_exp[i]);
-            }
+            if(u_cast_shadows[i])
+                shadow_factor = test_shadowmap(v_world_position, i);
+            
             
             //store the amount of diffuse light
-            light += u_light_color[i] * NdotL * att_factor * spot_factor;
+            light += u_light_color[i] * NdotL * att_factor * spot_factor * shadow_factor;
         }
     }
 
-    //alpha is not modified in single pass so we cool
-    gl_FragColor = vec4(color.xyz * light, color.a) + vec4(texture2D(u_emissive_texture, uv).xyz, 0);
+    //alpha and emissive texture only used once in singlepass
+    vec3 emissive_value = texture2D (u_emissive_texture, uv).xyz;
+    gl_FragColor = vec4(color.xyz * light + emissive_value, color.a);
 }
 
 \quad.vs
