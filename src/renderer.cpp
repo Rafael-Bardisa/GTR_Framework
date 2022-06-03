@@ -417,19 +417,21 @@ void Renderer::uploadLightData(LightEntity* light, Shader* shader){
     shader->setUniform("u_target", light->target);
     
 #warning TODO reactivar sombras
-    bool use_shadowmap = /*light->cast_shadows*/ false;
-    if (use_shadowmap){
-        shader->setUniform("u_cast_shadows", use_shadowmap );
-        shader->setUniform("u_shadow_bias", light->shadow_bias);
-        shader->setUniform("u_shadowmap_dimensions", light->atlas_shadowmap_dimensions);
-        shader->setUniform("u_light_viewprojection", light->light_camera->viewprojection_matrix);
+    Matrix44 default_viewprojection;
+    default_viewprojection.setIdentity();
+    
+    bool use_shadows = /*light->cast_shadows*/ false;
+
+    shader->setUniform("u_cast_shadows", use_shadows );
+    shader->setUniform("u_shadow_bias", use_shadows ? light->shadow_bias : 0.f);
+    shader->setUniform("u_shadowmap_dimensions", light->atlas_shadowmap_dimensions);
+    shader->setUniform("u_light_viewprojection", use_shadows ? light->light_camera->viewprojection_matrix : default_viewprojection);
         
-    }
+    
 }
 
 
 void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
-    
     //tell shader it is the first pass so it should use the alpha
     shader->setUniform("u_first_pass", true);
     for(auto light : lights){
@@ -439,15 +441,15 @@ void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
         
         glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE);
+        //glBlendFunc( GL_SRC_ALPHA,GL_ONE );
         
+        //tell shader to not add alpha, ambient and emissive
         shader->setUniform("u_ambient_light", Vector3());
-        //tell shader to not add alpha
         shader->setUniform("u_first_pass", false);
-        //std::cout << i;
     }
 }
 
-void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
+void Renderer::uploadLightsData(Shader *shader) {
     Vector3 positions[MAX_LIGHTS];
     Vector3 light_color[MAX_LIGHTS];
     int type[MAX_LIGHTS];
@@ -457,15 +459,17 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
     float cone_exp[MAX_LIGHTS];
     Vector3 light_direction[MAX_LIGHTS];
     Vector3 target[MAX_LIGHTS];
+    
     bool cast_shadows[MAX_LIGHTS];
     float shadow_bias[MAX_LIGHTS];
-    //Texture* shadowmap[MAX_LIGHTS];
+    Vector4 shadow_dimensions[MAX_LIGHTS];
     Matrix44 light_viewprojection[MAX_LIGHTS];
     
     //default to fill array
     Matrix44 default_viewprojection;
     default_viewprojection.setIdentity();
-    //do the draw call that renders the mesh into the screen
+    
+    //fill the arrays of light information to send to the shader
     for (int i = 0; i < num_lights; i++){
         LightEntity* light = lights[i];
         positions[i] = light->model.getTranslation();
@@ -483,9 +487,11 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
         
         cast_shadows[i] = use_shadows;
         shadow_bias[i] = use_shadows ? light->shadow_bias : 0.f;
-        //shadowmap[i] = *light->shadow_map;
+        shadow_dimensions[i] = light->atlas_shadowmap_dimensions;
         light_viewprojection[i] = use_shadows ? light->light_camera->viewprojection_matrix : default_viewprojection;
     }
+    
+    //upload information to the shader
     shader->setUniform("u_num_lights", num_lights);
     shader->setUniform3Array("u_light_position", (float*)&positions, MAX_LIGHTS);
     shader->setUniform3Array("u_light_color", (float*)&light_color, MAX_LIGHTS);
@@ -500,8 +506,14 @@ void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
     
     shader->setUniform1Array("u_cast_shadows", (int*)&cast_shadows, MAX_LIGHTS);
     shader->setUniform1Array("u_shadow_bias", (float*)&shadow_bias, MAX_LIGHTS);
+    shader->setUniform4Array("u_shadowmap_dimensions", (float*)&shadow_dimensions, MAX_LIGHTS);
+}
+
+void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
+    uploadLightsData(shader);
     
     mesh->render(GL_TRIANGLES);
+    
 }
 
 //renders a mesh given its transform and material
@@ -544,8 +556,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     material->alpha_mode == GTR::eAlphaMode::BLEND ? glEnable(GL_BLEND) : glDisable(GL_BLEND);
     material->alpha_mode == GTR::eAlphaMode::BLEND ?
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) : glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-    
-
     
     if (multipass){
         

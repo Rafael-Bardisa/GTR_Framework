@@ -85,11 +85,17 @@ namespace GTR {
         void renderMultipass(Mesh *mesh, Shader *shader);
 
         [[deprecated("I'll use multipass")]]
+        void extracted(Shader *shader);
+        
         void renderSinglepass(Mesh *mesh, Shader *shader);
         
+        //uploads to shader
+        //object properties
         void uploadCommonData(Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader);
         
+        //light properties
         void uploadLightData(LightEntity* light, Shader* shader);
+        void uploadLightsData(Shader *shader);
         
 //to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Material* material, Camera* camera);
