@@ -361,6 +361,7 @@ void Renderer::queueNode(const Matrix44& prefab_model, GTR::Node* node, Camera* 
 		queueNode(prefab_model, node->children[i], camera);
 }
 
+//upload material and camera info which is common in multipass
 void Renderer::uploadCommonData(Camera *camera, GTR::Material *material, const Matrix44 &model, Shader *shader) {
     shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
     shader->setUniform("u_camera_position", camera->eye);
@@ -387,7 +388,7 @@ void Renderer::uploadCommonData(Camera *camera, GTR::Material *material, const M
     //if para guardar recursos
     shader->setUniform("u_use_normalmap", normal_texture ? true : false);
     if (normal_texture){
-        to_send = normal_texture ? normal_texture : Texture::getBlueTexture();
+        to_send = normal_texture;
         shader->setUniform("u_normal_texture", to_send, 3);
         
     }
@@ -400,7 +401,7 @@ void Renderer::uploadCommonData(Camera *camera, GTR::Material *material, const M
     shader->setUniform("u_alpha_cutoff", material->alpha_mode == GTR::eAlphaMode::MASK ? material->alpha_cutoff : 0);
     shader->setUniform("u_ambient_light", current_scene->ambient_light);
     //use alpha once during blending
-    shader->setUniform("u_use_alpha", true);
+    //shader->setUniform("u_use_alpha", true);
 }
 
 void Renderer::uploadLightData(LightEntity* light, Shader* shader){
@@ -449,7 +450,9 @@ void Renderer::renderMultipass(Mesh *mesh, Shader *shader) {
     }
 }
 
+//upload info of all lights to shader
 void Renderer::uploadLightsData(Shader *shader) {
+    //light data
     Vector3 positions[MAX_LIGHTS];
     Vector3 light_color[MAX_LIGHTS];
     int type[MAX_LIGHTS];
@@ -460,18 +463,21 @@ void Renderer::uploadLightsData(Shader *shader) {
     Vector3 light_direction[MAX_LIGHTS];
     Vector3 target[MAX_LIGHTS];
     
+    //shadow data
     bool cast_shadows[MAX_LIGHTS];
     float shadow_bias[MAX_LIGHTS];
     Vector4 shadow_dimensions[MAX_LIGHTS];
     Matrix44 light_viewprojection[MAX_LIGHTS];
     
-    //default to fill array
+    //default viewproj to fill array
     Matrix44 default_viewprojection;
     default_viewprojection.setIdentity();
     
     //fill the arrays of light information to send to the shader
     for (int i = 0; i < num_lights; i++){
         LightEntity* light = lights[i];
+        
+        //light data
         positions[i] = light->model.getTranslation();
         light_color[i] = light->color * light->intensity;
         type[i] = (int)light->type;
@@ -483,6 +489,7 @@ void Renderer::uploadLightsData(Shader *shader) {
         target[i] = light->target;
         
 #warning TODO activar sombras
+        //shadow data
         bool use_shadows = /*light->cast_shadows*/ false;
         
         cast_shadows[i] = use_shadows;
@@ -493,6 +500,8 @@ void Renderer::uploadLightsData(Shader *shader) {
     
     //upload information to the shader
     shader->setUniform("u_num_lights", num_lights);
+    
+    //light data
     shader->setUniform3Array("u_light_position", (float*)&positions, MAX_LIGHTS);
     shader->setUniform3Array("u_light_color", (float*)&light_color, MAX_LIGHTS);
     shader->setUniform1Array("u_light_type", (int*)&type, MAX_LIGHTS);
@@ -500,15 +509,17 @@ void Renderer::uploadLightsData(Shader *shader) {
     shader->setUniform3Array("u_angle", (float*)&angle, MAX_LIGHTS);
     shader->setUniform1Array("u_cone_angle_cosine", (float*)&cone_angle_cosine, MAX_LIGHTS);
     shader->setUniform1Array("u_cone_exp", (float*)&cone_exp, MAX_LIGHTS);
-    
     shader->setUniform3Array("u_light_direction", (float*)&light_direction, MAX_LIGHTS);
     shader->setUniform3Array("u_target", (float*)&target, MAX_LIGHTS);
     
+    //shadow data
     shader->setUniform1Array("u_cast_shadows", (int*)&cast_shadows, MAX_LIGHTS);
     shader->setUniform1Array("u_shadow_bias", (float*)&shadow_bias, MAX_LIGHTS);
     shader->setUniform4Array("u_shadowmap_dimensions", (float*)&shadow_dimensions, MAX_LIGHTS);
+    shader->setMatrix44Array("u_light_viewprojection", (Matrix44*)&light_viewprojection, MAX_LIGHTS);
 }
 
+//upload info of all lights and render mesh with one call
 void Renderer::renderSinglepass(Mesh *mesh, Shader *shader) {
     uploadLightsData(shader);
     
@@ -558,7 +569,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, Mesh* mesh, GTR::Mat
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) : glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     
     if (multipass){
-        
         glDepthFunc(GL_LEQUAL);
         renderMultipass(mesh, shader);
     }

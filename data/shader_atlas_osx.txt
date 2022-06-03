@@ -684,6 +684,7 @@ void main()
             if (u_light_type[i] == 2)
                 //spot factor if light is spot
                 spot_factor = spot_factor(u_light_direction[i], L, u_cone_angle_cos[i], u_cone_exp[i]);
+                
             if(u_cast_shadows[i])
                 shadow_factor = test_shadowmap(v_world_position, i);
             
