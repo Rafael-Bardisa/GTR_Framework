@@ -76,7 +76,6 @@ namespace GTR {
         bool cast_shadows;
         float shadow_bias;
         
-        FBO* fbo;
         Camera* light_camera;
         
         Vector4 atlas_shadowmap_dimensions;

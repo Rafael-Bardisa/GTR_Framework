@@ -15,6 +15,17 @@
 
 #warning uso warning para resaltar comentarios en xcode que si no no se ven
 
+#warning DOUBT dynamic indexes?
+Vector4 atlas_indexes[MAX_LIGHTS] = {
+    Vector4(0, 0, 0.5, 0.5),
+    Vector4(0.5, 0, 0.5, 0.5),
+    Vector4(0, 0.5, 0.5, 0.5),
+    Vector4(0.5, 0.5, 0.25, 0.25),
+    Vector4(0.75, 0.5, 0.25, 0.25),
+    Vector4(0.5, 0.75, 0.25, 0.25),
+};
+
+
 using namespace GTR;
 
 float renderFactor(GTR::eAlphaMode mode){
@@ -33,13 +44,27 @@ Renderer::Renderer(){
     gbuffers = nullptr;
     illumination_fbo = nullptr;
     
+    //shadow texture initialization
+    shadow_atlas = new Texture();
+    shadow_fbo = new FBO();
+    shadow_fbo->setDepthOnly(2048, 2048);
+    shadow_atlas = shadow_fbo->depth_texture;
+    show_shadow_atlas = false;
+    
 }
 
-void Renderer::showShadowmap(LightEntity* light) {
+void Renderer::showShadowAtlas() {
+    // split into parts because it is atlas -> Each camera will have different near far
     Shader* shader = Shader::getDefaultShader("depth");
     shader->enable();
-    shader->setUniform("u_camera_nearfar", Vector2(light->light_camera->near_plane, light->light_camera->far_plane));
-//    shadow_atlas->toViewport(shader);
+    //since it is shadow atlas, each light goes to its own slot in viewport
+    //for (auto light:lights){
+    //    shader->setUniform("u_camera_nearfar", Vector2(light->light_camera->near_plane, light->light_camera->far_plane));
+    //    shader->setUniform("u_light_shadow_slot", light->atlas_shadowmap_dimensions);
+        
+    shader->setUniform("u_camera_nearfar", Vector2(0.1, 150));
+    shadow_atlas->toViewport(shader);
+    shader->disable();
 }
 
 void Renderer::renderForward(Camera *camera) {
@@ -92,7 +117,7 @@ void Renderer::renderDeferred(Camera* camera){
     
     if (!illumination_fbo){
     illumination_fbo = new FBO();
-#warning TODO aligual como mucho 4 buffers o el maximo de datos para no pillar el render
+
     illumination_fbo->create(w, h, 1, GL_RGB, GL_UNSIGNED_BYTE, true);
     }
     //start rendering inside the gbuffers
@@ -232,16 +257,15 @@ void Renderer::loadScene(Camera *camera, GTR::Scene *&scene) {
         {
             PrefabEntity* pent = (GTR::PrefabEntity*)ent;
             if(pent->prefab)
-#warning TODO renderPrefab should check if prefab receives light from any source or if inside camera frustum
+#warning TODO queuePrefab should check if prefab receives light from any source or if inside camera frustum
                 queuePrefab(ent->model, pent->prefab, camera);
         }
     }
-    
-#warning TODO atlas mejor
-    generateShadowAtlas();
-    
+        
     // sort node vector by priority
     std::sort(instructions.begin(), instructions.end(), GTR::renderPriority);
+    
+    generateShadowAtlas();
 }
 
 void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
@@ -261,6 +285,8 @@ void Renderer::renderScene(GTR::Scene* scene, Camera* camera)
         renderForward(camera):
         renderDeferred(camera);
     //showShadowmap(lights[0]);
+    if (show_shadow_atlas)
+    showShadowAtlas();
 }
 
 // compare distance to current camera
@@ -271,43 +297,84 @@ bool light_distance(const LightEntity* first, const LightEntity* second){
     return first_distance < second_distance;
 }
 
+//change viewport from texture size and normalized size
+void glViewport(Vector2 texture_dimensions, Vector4 size){
+    glViewport(texture_dimensions.x * size.x,
+               texture_dimensions.y * size.y,
+               texture_dimensions.x * size.z,
+               texture_dimensions.y * size.w);
+}
 
 // for each light, assign a slot in shadow atlas. Directional and closer get more resolution
 void Renderer::generateShadowAtlas(){
-    std::sort(lights.begin(), lights.end(), light_distance);
-    for (auto* light:lights){
-        //assign slot coordinates to light
-        
-        
-        //generate shadowmap of light
-        
-    }
-}
-
-//
-void Renderer::generateShadowMap(LightEntity* light){
-    if (!light->cast_shadows) {
-        if (light->fbo){
-            delete light->fbo;
-            light->fbo = nullptr;
-            //light->shadow_map = nullptr;
-        }
-        return;
-    }
     
-    if (!light->fbo){
-        light->fbo = new FBO();
-        light->fbo->setDepthOnly(1024, 1024);
-        //light->shadow_map = light->fbo->depth_texture;
-#warning TODO esto activa la camara de la luz
-        if(!light->light_camera) light->light_camera = new Camera();
-    }
-    light->fbo->bind();
+    Application* instance = Application::instance;
+    
+    int w = instance->window_width;
+    int h = instance->window_height;
+    
+    int shadow_idx = 0;
+    //give closer and directional lights preference in the shadow atlas
+    std::sort(lights.begin(), lights.end(), light_distance);
+    
     Camera* view_camera = Camera::current;
     
+    shadow_fbo->bind();
+    
+    int shadow_w = shadow_atlas->width;
+    int shadow_h = shadow_atlas->height;
+    
+    Vector2 shadow_atlas_dimensions = Vector2(shadow_w, shadow_h);
+
+    for (auto* light:lights){
+        if (!light->cast_shadows) continue;
+        
+
+        //assign slot coordinates to light
+#warning TODO atlas indexes dynamic? how
+        light->atlas_shadowmap_dimensions = atlas_indexes[shadow_idx];
+        
+        shadow_idx++;
+        //change viewport here to not modify render flat mesh
+        glViewport(shadow_atlas_dimensions, light->atlas_shadowmap_dimensions);
+        
+        //generate shadowmap of light
+        generateShadowMap(light, view_camera);
+        
+    }
+    shadow_fbo->unbind();
+    view_camera->enable();
+    //reset viewport
+    glViewport(Vector2(w, h), Vector4(0,0,1,1));
+    
+}
+
+
+
+// given a light, uses its dimensions to use a part of the atlas for itself
+// since this is used in generate shadow atlas, which is a loop through all lights, we can skip resetting the viewport
+// and only resetting in atlas function
+void Renderer::generateShadowMap(LightEntity* light, Camera* view_camera){
+    if (!light->cast_shadows) return;
+    //light->fbo = new FBO();
+    //light->fbo->setDepthOnly(1024, 1024);
+    //light->shadow_map = light->fbo->depth_texture;
+
+    if(!light->light_camera) light->light_camera = new Camera();
+    
+    //change viewport according to light shadow dimensions
     light->configCamera();
     Camera* light_camera = light->light_camera;
     light_camera->enable();
+    
+#warning DOUBT directional lights stay in the camera position lol esto esta un poco mal
+    // works with the spot but not with directional???
+    if (light->type == SPOT){
+        light->area_size = 1500;
+        Camera* light_camera = light->light_camera;
+        light->configCamera();
+        light_camera->moveGlobal(view_camera->eye - light_camera->eye);
+    }
     
     glClear(GL_DEPTH_BUFFER_BIT);
     for (auto instruction : instructions){
@@ -315,11 +382,7 @@ void Renderer::generateShadowMap(LightEntity* light){
         if (instruction.material->alpha_mode == eAlphaMode::BLEND) continue;
         
         renderFlatMesh(instruction.model, instruction.mesh, instruction.material, light_camera);
-        
     }
-    
-    light->fbo->unbind();
-    view_camera->enable();
 }
 
 //adds nodes of prefab to renderer node list
@@ -390,11 +453,15 @@ void Renderer::uploadCommonData(Camera *camera, GTR::Material *material, const M
     if (normal_texture){
         to_send = normal_texture;
         shader->setUniform("u_normal_texture", to_send, 3);
-        
     }
     
     to_send = occlusion_texture ? occlusion_texture : Texture::getWhiteTexture();
     shader->setUniform("u_occlusion_texture", to_send, 4);
+    
+    //assuming a maximum of 8 textures for gpu
+    to_send = shadow_atlas ? shadow_atlas : Texture::getWhiteTexture();
+    shader->setUniform("u_shadow_atlas", to_send, 7);
+
     
     
     //this is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
@@ -411,6 +478,7 @@ void Renderer::uploadLightData(LightEntity* light, Shader* shader){
     shader->setUniform("u_light_position", light->model.getTranslation());
     shader->setUniform("u_max_distance", light->max_dist);
     float light_angle_cosine = cos(light->cone_angle * DEG2RAD);
+    //shader->setUniform("u_angle", light->angle);
     shader->setUniform("u_cone_angle_cos", light_angle_cosine);
     shader->setUniform("u_cone_exp", light->cone_exp);
     shader->setUniform("u_light_direction", light->model.rotateVector(Vector3(0, 0, -1)).normalize());
@@ -457,7 +525,7 @@ void Renderer::uploadLightsData(Shader *shader) {
     Vector3 light_color[MAX_LIGHTS];
     int type[MAX_LIGHTS];
     float max_distance[MAX_LIGHTS];
-    float angle[MAX_LIGHTS];
+    //float angle[MAX_LIGHTS];
     float cone_angle_cosine[MAX_LIGHTS];
     float cone_exp[MAX_LIGHTS];
     Vector3 light_direction[MAX_LIGHTS];
@@ -482,7 +550,7 @@ void Renderer::uploadLightsData(Shader *shader) {
         light_color[i] = light->color * light->intensity;
         type[i] = (int)light->type;
         max_distance[i] = light->max_dist;
-        angle[i] = light->angle;
+        //angle[i] = light->angle;
         cone_angle_cosine[i] = cos(light->cone_angle * DEG2RAD);
         cone_exp[i] = light->cone_exp;
         light_direction[i] = light->model.rotateVector(Vector3(0, 0, -1)).normalize();
@@ -506,7 +574,7 @@ void Renderer::uploadLightsData(Shader *shader) {
     shader->setUniform3Array("u_light_color", (float*)&light_color, MAX_LIGHTS);
     shader->setUniform1Array("u_light_type", (int*)&type, MAX_LIGHTS);
     shader->setUniform1Array("u_max_distance", (float*)&max_distance, MAX_LIGHTS);
-    shader->setUniform3Array("u_angle", (float*)&angle, MAX_LIGHTS);
+    //shader->setUniform3Array("u_angle", (float*)&angle, MAX_LIGHTS);
     shader->setUniform1Array("u_cone_angle_cosine", (float*)&cone_angle_cosine, MAX_LIGHTS);
     shader->setUniform1Array("u_cone_exp", (float*)&cone_exp, MAX_LIGHTS);
     shader->setUniform3Array("u_light_direction", (float*)&light_direction, MAX_LIGHTS);
@@ -516,7 +584,8 @@ void Renderer::uploadLightsData(Shader *shader) {
     shader->setUniform1Array("u_cast_shadows", (int*)&cast_shadows, MAX_LIGHTS);
     shader->setUniform1Array("u_shadow_bias", (float*)&shadow_bias, MAX_LIGHTS);
     shader->setUniform4Array("u_shadowmap_dimensions", (float*)&shadow_dimensions, MAX_LIGHTS);
-    shader->setMatrix44Array("u_light_viewprojection", (Matrix44*)&light_viewprojection, MAX_LIGHTS);
+#warning DOUBT singlepass y multipass no son equivalentes y activar la linea de abajo quita la spot en singlepass
+    //shader->setMatrix44Array("u_light_viewprojection", (Matrix44*)&light_viewprojection, MAX_LIGHTS);
 }
 
 //upload info of all lights and render mesh with one call

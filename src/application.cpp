@@ -295,6 +295,8 @@ void Application::onKeyDown( SDL_KeyboardEvent event )
             renderer->shaderpass == GTR::Renderer::MULTIPASS? GTR::Renderer::SINGLEPASS : GTR::Renderer::MULTIPASS;
             std::cout << (renderer->shaderpass == GTR::Renderer::MULTIPASS);
             break;
+        case SDLK_l: renderer->show_shadow_atlas = !renderer->show_shadow_atlas;
+            break;
         case SDLK_p: renderer->pipeline = renderer->pipeline == GTR::Renderer::DEFERRED? GTR::Renderer::FORWARD : GTR::Renderer::DEFERRED;
             break;
 		case SDLK_f: camera->center.set(0, 0, 0); camera->updateViewMatrix(); break;

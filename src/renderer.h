@@ -59,6 +59,7 @@ namespace GTR {
         
         Texture* shadow_atlas;
         FBO* shadow_fbo;
+        bool show_shadow_atlas;
 		//add here your functions
 		//...
         
@@ -110,9 +111,9 @@ namespace GTR {
         Camera *extracted(GTR::LightEntity *light);
         
         void generateShadowAtlas();
-        void generateShadowMap(LightEntity* light);
+        void generateShadowMap(LightEntity* light, Camera* view_camera);
         
-        void showShadowmap(LightEntity* light);
+        void showShadowAtlas();
         };
 
 	Texture* CubemapFromHDRE(const char* filename);

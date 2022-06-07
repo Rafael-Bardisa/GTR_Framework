@@ -173,7 +173,6 @@ GTR::LightEntity::LightEntity()
     cast_shadows = false;
     shadow_bias = 0;
     
-    fbo = nullptr;
     light_camera = nullptr;
     
     atlas_shadowmap_dimensions = Vector4();
@@ -182,8 +181,18 @@ GTR::LightEntity::LightEntity()
 // configure the light camera to match light specs
 void GTR::LightEntity::configCamera()
 {
-    light_camera->setPerspective(cone_angle*2, 1.0, 0.1, max_dist);
-    light_camera->lookAt(model * Vector3(), model * Vector3(0,0,-1), model.rotateVector(Vector3(0,1,0)));
+    if (type == DIRECTIONAL){
+        //use light area to define how big the frustum is
+        float halfarea = area_size / 2;
+        // will be square because shadowmap
+        light_camera->setOrthographic( -halfarea, halfarea, halfarea, -halfarea, 0.1, max_dist);
+        light_camera->lookAt(model * Vector3(), model * Vector3(0,0,-1), model.rotateVector(Vector3(0,1,0)));
+
+    }
+    else {
+        light_camera->setPerspective(cone_angle*2, 1.0, 0.1, max_dist);
+        light_camera->lookAt(model * Vector3(), model * Vector3(0,0,-1), model.rotateVector(Vector3(0,1,0)));
+    }
 }
 
 bool GTR::LightEntity::boxInFrustum(BoundingBox aabb){
