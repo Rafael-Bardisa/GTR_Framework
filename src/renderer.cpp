@@ -370,10 +370,10 @@ void Renderer::generateShadowMap(LightEntity* light, Camera* view_camera){
 #warning DOUBT directional lights stay in the camera position lol esto esta un poco mal
     // works with the spot but not with directional???
     if (light->type == SPOT){
-        light->area_size = 1500;
+        //light->area_size = 1500;
         Camera* light_camera = light->light_camera;
         light->configCamera();
-        light_camera->moveGlobal(view_camera->eye - light_camera->eye);
+        light_camera->moveGlobal(light_camera->eye - view_camera->eye);
     }
     
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -563,7 +563,7 @@ void Renderer::uploadLightsData(Shader *shader) {
         cast_shadows[i] = use_shadows;
         shadow_bias[i] = use_shadows ? light->shadow_bias : 0.f;
         shadow_dimensions[i] = light->atlas_shadowmap_dimensions;
-        light_viewprojection[i] = use_shadows ? light->light_camera->viewprojection_matrix : default_viewprojection;
+        //light_viewprojection[i] = use_shadows ? light->light_camera->viewprojection_matrix : default_viewprojection;
     }
     
     //upload information to the shader
@@ -585,7 +585,7 @@ void Renderer::uploadLightsData(Shader *shader) {
     shader->setUniform1Array("u_shadow_bias", (float*)&shadow_bias, MAX_LIGHTS);
     shader->setUniform4Array("u_shadowmap_dimensions", (float*)&shadow_dimensions, MAX_LIGHTS);
 #warning DOUBT singlepass y multipass no son equivalentes y activar la linea de abajo quita la spot en singlepass
-    //shader->setMatrix44Array("u_light_viewprojection", (Matrix44*)&light_viewprojection, MAX_LIGHTS);
+    shader->setMatrix44Array("u_light_viewprojection", (Matrix44*)&light_viewprojection, MAX_LIGHTS);
 }
 
 //upload info of all lights and render mesh with one call
